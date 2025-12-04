@@ -1,6 +1,6 @@
 {
     "client_version"     : 39,
-    "client_repo_url"    : "https://github.com/87flowers/OpenBench",
+    "client_repo_url"    : "https://github.com/nodchip/ShogiBench",
     "client_repo_ref"    : "shogi",
 
     "fastchess_min_version" : "0.9.0",
@@ -8,7 +8,7 @@
     "fastchess_repo_ref"    : "master",
 
     "shogitest_min_version" : "0.1.1",
-    "shogitest_repo_url"    : "https://github.com/87flowers/shogitest",
+    "shogitest_repo_url"    : "https://github.com/nodchip/shogitest",
     "shogitest_repo_ref"    : "main",
 
     "use_cross_approval"          : false,
@@ -17,23 +17,10 @@
     "balance_engine_throughputs"  : false,
 
     "books" : [
-        "4moves_v1_shogi_sfen.epd",
-        "6moves_v1_shogi_sfen.epd",
-        "2moves_v1.epd",
-        "3moves_FRC.epd",
-        "4moves_noob.epd",
-        "8moves_v3.epd",
-        "DFRC.epd",
-        "Endgames.epd",
-        "Pohl.epd",
-        "Pohl.pgn",
-        "UHO_4060_v2.epd",
-        "UHO_4060_vB.epd",
-        "UHO_4060_vT.epd",
-        "UHO_Lichess_4852_v1.epd"
+        "floodgate32-80.adjust_bishop_exchange.sfen.epd"
     ],
 
     "engines" : [
-        "Stoat"
+        "tanuki-"
     ]
 }
