@@ -1,5 +1,5 @@
 {
-    "private" : true,
+    "private" : false,
     "nps"     : 744397,
     "source"  : "https://github.com/nodchip/tanuki-",
 
