@@ -22,7 +22,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '@!zw2l8til1(0eb_nk+1w!(n78gqm&u)s)_v7#k6iseia@g9q0'
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'kishibe.dyndns.tv',
+    'bench.kishibe.dyndns.tv',
+    'localhost',
+    '127.0.0.1',
+]
 
 HTML_MINIFY   = True
 APPEND_SLASH  = True
@@ -36,7 +41,7 @@ PROJECT_PATH  = os.path.join(SETTINGS_DIR, os.pardir)
 PROJECT_PATH  = os.path.abspath(PROJECT_PATH)
 TEMPLATE_PATH = os.path.join(PROJECT_PATH, 'Templates')
 
-MEDIA_URL  = 'Media/'
+MEDIA_URL  = '/Media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'Media')
 
 INSTALLED_APPS = [
@@ -131,4 +136,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/2.0/howto/static-files/
 
-STATIC_URL = 'ShogiBench/static/'
+STATIC_URL = '/static/'
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://kishibe.dyndns.tv',
+    'https://bench.kishibe.dyndns.tv',
+]
