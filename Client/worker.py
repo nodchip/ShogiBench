@@ -19,6 +19,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import argparse
+import codecs_util
 import cpuinfo
 import importlib
 import json
@@ -741,15 +742,15 @@ def get_version(program):
     # Try to execute the program from the command line
     # First with `--version`, and again with just `version`
 
-    try:
-        process = Popen([program, '--version'], stdout=PIPE, stderr=PIPE)
-        stdout  = process.communicate()[0].decode('utf-8')
-        return re.search(r'\d+\.\d+(\.\d+)?', stdout).group()
+    for option in ['--version', 'version', '-version']:
+        try:
+            process = Popen([program, option], stdout=PIPE, stderr=PIPE)
+            stdout  = codecs_util.decode(process.communicate()[0])
+            return re.search(r'\d+\.\d+(\.\d+)?', stdout).group()
+        except:
+            pass
+    raise Exception('Failed to get the program version.')
 
-    except:
-        process = Popen([program, 'version'], stdout=PIPE, stderr=PIPE)
-        stdout  = process.communicate()[0].decode('utf-8')
-        return re.search(r'\d+\.\d+(\.\d+)?', stdout).group()
 
 def compare_versions(program_path, min_version_str):
 
@@ -1004,7 +1005,7 @@ def build_fastchess_in_dir(config, runner_dir):
     # Execute the build, using our C++ compiler, and record any output
     make_cmd    = ['make', '-j', 'CXX=%s' % config.cxx_comp]
     process     = subprocess.Popen(make_cmd, cwd=runner_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    comp_output = process.communicate()[0].decode('utf-8')
+    comp_output = codecs_util.decode(process.communicate()[0])
 
     # Make threw an error, and thus failed to build
     if process.returncode:
@@ -1016,7 +1017,7 @@ def build_fastchess_in_dir(config, runner_dir):
 def build_shogitest_in_dir(config, runner_dir):
     make_cmd    = ['make', 'openbench']
     process     = subprocess.Popen(make_cmd, cwd=runner_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    comp_output = process.communicate()[0].decode('utf-8')
+    comp_output = codecs_util.decode(process.communicate()[0])
 
     # Make threw an error, and thus failed to build
     if process.returncode:

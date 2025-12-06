@@ -19,6 +19,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import argparse
+import codecs_util
 import hashlib
 import os
 import platform
@@ -346,7 +347,7 @@ def download_public_engine(engine, net_path, branch, source, make_path, out_path
 
         # Build the engine, which will produce a binary to bin_path, to be moved after
         process     = subprocess.Popen(make_cmd, cwd=make_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        comp_output = process.communicate()[0].decode('utf-8')
+        comp_output = codecs_util.decode(process.communicate()[0])
 
         # Verify that the compilation subprocess did not exit with errors
         if process.returncode:
