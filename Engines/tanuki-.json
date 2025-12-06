@@ -4,7 +4,7 @@
     "source"  : "https://github.com/nodchip/tanuki-",
 
     "build" : {
-        "path"      : "",
+        "path"      : "source",
         "compilers" : ["clang++"],
         "cpuflags"  : ["AVX2"],
         "systems"   : ["Linux", "Windows", "Darwin"]
@@ -13,7 +13,7 @@
     "test_presets" : {
         "default" : {
             "base_branch"     : "main",
-            "book_name"       : "floodgate32-80.adjust_bishop_exchange.sfen.epd",
+            "book_name"       : "SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd",
             "test_bounds"     : "[0.00, 4.00]",
             "test_confidence" : "[0.10, 0.05]",
             "win_adj"         : "movecount=3 score=2000",
@@ -76,7 +76,7 @@
 
     "tune_presets" : {
         "default" : {
-            "book_name" : "floodgate32-80.adjust_bishop_exchange.sfen.epd",
+            "book_name" : "SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd",
             "win_adj"   : "movecount=3 score=400",
             "draw_adj"  : "movenumber=40 movecount=8 score=10"
         }
