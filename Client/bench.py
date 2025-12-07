@@ -71,17 +71,22 @@ def parse_stream_output(stream):
 def single_core_bench(binary, network, private, outqueue):
 
     # Basic command for Public engines
-    cmd = ['./%s' % (binary), 'bench']
+    cmd = ['./%s' % (binary)]
+    # やねうら王 9.10 で、コマンドライン引数で指定した USI オプションが実行されないため、
+    # 標準入力から入力する。
+    input = "\n".join(['bench', 'quit']) + "\n"
 
     # Adjust to handle setting Networks in Private engines
     if network and private:
         option = 'setoption name EvalFile value %s' % (network)
-        cmd = ['./%s' % (binary), option, 'bench', 'quit']
+        cmd = ['./%s' % (binary)]
+        input = "\n".join([option, 'bench', 'quit']) + "\n"
 
+    input = input.encode('utf-8')
     try: # Launch the bench and wait for results
         stdout, stderr = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        ).communicate()
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        ).communicate(input=input)
         outqueue.put(parse_stream_output(stdout))
 
     except: # Signal an error with (None, None)
