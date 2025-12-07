@@ -52,8 +52,8 @@ def parse_stream_output(stream):
         line = re.sub(r'[^a-zA-Z0-9 ]+', ' ', line)
 
         # Multiple methods, including Ethereal and Stockfish
-        nps_pattern   = r'(\d+\s+nps)|(nps\s+\d+)|(nodes second\s+\d+)'
-        bench_pattern = r'(\d+\s+nodes)|(nodes\s+\d+)|(nodes searched\s+\d+)'
+        nps_pattern   = r'(\d+\s+nps)|(nps\s+\d+)|(nodes second\s+\d+)|(Nodes/second    : \d+)'
+        bench_pattern = r'(\d+\s+nodes)|(nodes\s+\d+)|(nodes searched\s+\d+)|(Nodes searched  : \d+)'
 
         # Search for and set only once the NPS and Bench values
         re_nps = re.search(nps_pattern, line, re.IGNORECASE)
