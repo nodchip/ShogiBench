@@ -3,6 +3,7 @@ import os
 import re
 import requests
 import urllib.parse
+import hashlib
 
 # Basic Information:
 # Test options must contain 'Threads={} Hash={}'
@@ -76,6 +77,12 @@ def create_test():
     # All scripts connect through this API point, with an action in the POST data
     url = urllib.parse.urljoin(args.server, 'scripts')
 
+    with open(args.dev_network, 'rb') as network:
+        dev_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8]
+
+    with open(args.base_network, 'rb') as network:
+        base_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8]
+
     # POST payload must contain an action value
     data = {
         'username' : args.username,
@@ -88,13 +95,13 @@ def create_test():
 
         'dev_branch' : args.dev_branch,
         'dev_bench' : args.dev_bench,
-        'dev_network' : args.dev_network,
+        'dev_network' : dev_network_sha256,
         'dev_options' : args.dev_options,
         'dev_time_control' : args.dev_time_control,
 
         'base_branch' : args.base_branch,
         'base_bench' : args.base_bench,
-        'base_network' : args.base_network,
+        'base_network' : base_network_sha256,
         'base_options' : args.base_options,
         'base_time_control' : args.base_time_control,
 
