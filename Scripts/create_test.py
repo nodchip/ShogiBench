@@ -125,7 +125,7 @@ def create_test():
         "draw_adj": args.draw_adj,
         "scale_method": args.scale_method,
         "scale_nps": args.scale_nps,
-        "action": "UPLOAD_NETWORK",
+        "action": "CREATE_TEST",
     }
 
     # Upload the file and report the status code
