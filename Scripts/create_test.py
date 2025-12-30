@@ -3,7 +3,6 @@ import hashlib
 import os
 import re
 import requests
-import urllib.parse
 
 # Basic Information:
 # Test options must contain 'Threads={} Hash={}'
@@ -12,6 +11,11 @@ import urllib.parse
 # Max Games is ignored unless test is of type 'GAMES'
 # Networks must be assigned using their SHA256, not their name
 # Networks with the value '' are used for tests without Networks
+
+
+def url_join(*args):
+    # Join a set of URL paths while maintaining the correct format
+    return '/'.join([f.lstrip('/').rstrip('/') for f in args]) + '/'
 
 
 def create_test():
@@ -81,7 +85,7 @@ def create_test():
     args.server = args.server if args.server else os.environ["OPENBENCH_SERVER"]
 
     # All scripts connect through this API point, with an action in the POST data
-    url = urllib.parse.urljoin(args.server, "scripts")
+    url = url_join(args.server, "scripts")
 
     with open(args.dev_network, "rb") as network:
         dev_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8]
