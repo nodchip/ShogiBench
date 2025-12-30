@@ -88,10 +88,10 @@ def create_test():
     url = url_join(args.server, "scripts")
 
     with open(args.dev_network, "rb") as network:
-        dev_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8]
+        dev_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8].upper()
 
     with open(args.base_network, "rb") as network:
-        base_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8]
+        base_network_sha256 = hashlib.sha256(network.read()).hexdigest()[:8].upper()
 
     # POST payload must contain an action value
     data = {
