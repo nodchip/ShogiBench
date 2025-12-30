@@ -69,6 +69,7 @@ def upload_network():
     }
 
     # Upload the file and report the status code
+    print(data)
     with open(args.file, 'rb') as network:
         r = requests.post(url, data=data, files={ 'netfile' : network })
         print ('Code  : %s' % (r.status_code))

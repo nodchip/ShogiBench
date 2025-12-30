@@ -129,6 +129,7 @@ def create_test():
     }
 
     # Upload the file and report the status code
+    print(data)
     r = requests.post(url, data=data)
     print("Code  : %s" % (r.status_code))
 
