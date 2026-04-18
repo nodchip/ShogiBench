@@ -17,7 +17,8 @@
     "balance_engine_throughputs"  : false,
 
     "books" : [
-        "SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd"
+        "SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd",
+        "SHOGI.startpos.sfen.epd"
     ],
 
     "engines" : [
