@@ -50,12 +50,14 @@ def create_test():
     p.add_argument("--dev_branch", help="Dev Branch", required=True)
     p.add_argument("--dev_bench", help="Dev Bench", required=True)
     p.add_argument("--dev_network", help="Dev Network", required=True)
+    p.add_argument("--dev_book", help="Dev Book", default="")
     p.add_argument("--dev_options", help="Dev Options", required=True)
     p.add_argument("--dev_time_control", help="Dev Time", required=True)
 
     p.add_argument("--base_branch", help="Base Branch", required=True)
     p.add_argument("--base_bench", help="Base Bench", required=True)
     p.add_argument("--base_network", help="Base Network", required=True)
+    p.add_argument("--base_book", help="Base Book", default="")
     p.add_argument("--base_options", help="Base Options", required=True)
     p.add_argument("--base_time_control", help="Base Time", required=True)
 
@@ -104,11 +106,13 @@ def create_test():
         "dev_branch": args.dev_branch,
         "dev_bench": args.dev_bench,
         "dev_network": dev_network_sha256,
+        "dev_book": args.dev_book,
         "dev_options": args.dev_options,
         "dev_time_control": args.dev_time_control,
         "base_branch": args.base_branch,
         "base_bench": args.base_bench,
         "base_network": base_network_sha256,
+        "base_book": args.base_book,
         "base_options": args.base_options,
         "base_time_control": args.base_time_control,
         "test_mode": args.test_mode,

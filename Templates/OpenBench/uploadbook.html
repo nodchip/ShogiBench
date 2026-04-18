@@ -1,0 +1,61 @@
+{% extends "OpenBench/base.html" %}
+
+{% block scripts %}
+
+    <script>
+
+        document.addEventListener(
+            'DOMContentLoaded', function () {
+
+                var form = document.getElementById("book-form");
+                form.addEventListener("submit", function(event) {
+
+                    event.preventDefault(); // Stop event from hitting the wrong URL
+
+                    // Adjust the Form endpoint based on Book Name and Engine
+                    var book_name   = encodeURIComponent(document.getElementById("book-name").value);
+                    var engine_name = encodeURIComponent(document.getElementById("book-engine").value);
+
+                    // OpenBench Endpoint: books/engine/upload/name/
+                    form.action = '/books/' + engine_name + '/upload/' + book_name + '/'
+                    form.submit()
+                });
+            }, false
+        );
+
+    </script>
+
+{% endblock %}
+
+{% block content %}
+
+    <form method="post" enctype="multipart/form-data" id="book-form">
+        {% csrf_token %}
+        <div class="form">
+             <div class="col">
+                <div class="row">
+                    <label for="book-name">Name</label>
+                    <input id="book-name" name="name">
+                </div>
+                <div class="row">
+                    <label for="bookfile">Book</label>
+                    <input id="bookfile" name="bookfile" type="file">
+                </div>
+                <div class="row">
+                    <label for="book-engine">Engine</label>
+                    <select id="book-engine" name="engine">
+                    {% for engine in config.engines %}
+                        {% if profile and profile.engine == engine %}
+                            <option selected value="{{ engine }}">{{ engine }}</option>
+                        {% else %}
+                            <option value="{{ engine }}">{{ engine }}</option>
+                        {% endif %}
+                    {% endfor %}
+                    </select>
+                </div>
+                <input type="submit" class="anchorbutton btn-blue w-100" value="Upload">
+            </div>
+        </div>
+    </form>
+
+{% endblock %}

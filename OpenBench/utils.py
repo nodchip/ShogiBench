@@ -295,6 +295,21 @@ def network_disambiguate(engine, identifier):
     # No Network exists with engine this Name or Sha
     return None
 
+def book_disambiguate(engine, identifier):
+
+    candidates = Book.objects.filter(engine=engine)
+
+    # Identifier actually refers to the Book name
+    if (book := candidates.filter(name=identifier).first()):
+        return book
+
+    # Identifier actually refers to the Book SHA
+    if (book := candidates.filter(sha256=identifier).first()):
+        return book
+
+    # No Book exists with engine this Name or Sha
+    return None
+
 def network_upload(request, engine, name):
 
     # Extract and process the Network file to produce a SHA
@@ -329,6 +344,43 @@ def network_upload(request, engine, name):
     # Redirect to Engine specific view, to add clarity
     return OpenBench.views.redirect(request, '/networks/%s/' % (engine), status='Uploaded %s for %s' % (name, engine))
 
+def book_upload(request, engine, name):
+
+    bookfile = request.FILES.get('bookfile')
+    if not bookfile:
+        return OpenBench.views.redirect(request, '/books/', error='Please select a book file to upload')
+
+    payload  = bookfile.read()
+    sha256   = hashlib.sha256(payload).hexdigest()[:8].upper()
+
+    # Rejecct Books with strange characters
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', name):
+        return OpenBench.views.redirect(request, '/books/', error='Valid characters are [a-zA-Z0-9_.-]')
+
+    # Don't allow duplicate uploads for the same engine
+    if Book.objects.filter(engine=engine, sha256=sha256):
+        return OpenBench.views.redirect(request, '/books/', error='Book with that hash already exists for that engine')
+
+    # Don't allow duplicate uploads for the same engine
+    if Book.objects.filter(engine=engine, name=name):
+        return OpenBench.views.redirect(request, '/books/', error='Book with that name already exists for that engine')
+
+    # Filter out anyone who has used an unknown engine
+    if engine not in OPENBENCH_CONFIG['engines'].keys():
+        return OpenBench.views.redirect(request, '/books/', error='No Engine found with matching name')
+
+    # Save the file locally into /Media/ if we don't already have this file
+    if not Book.objects.filter(sha256=sha256) and not Network.objects.filter(sha256=sha256):
+        FileSystemStorage().save('%s' % (sha256), ContentFile(payload))
+
+    # Create the Book object mapping to the saved local file
+    Book.objects.create(
+        sha256=sha256, name=name,
+        engine=engine, author=request.user.username)
+
+    # Redirect to Engine specific view, to add clarity
+    return OpenBench.views.redirect(request, '/books/%s/' % (engine), status='Uploaded %s for %s' % (name, engine))
+
 def network_default(request, engine, network):
 
     # Update default to False for all Networks, except this one
@@ -348,6 +400,15 @@ def network_delete(request, engine, network):
     else:
         return OpenBench.views.redirect(request, '/networks/%s/' % (engine), error=message)
 
+def book_delete(request, engine, book):
+
+    message, success = OpenBench.model_utils.book_delete(book)
+
+    if success:
+        return OpenBench.views.redirect(request, '/books/%s' % (engine), status=message)
+    else:
+        return OpenBench.views.redirect(request, '/books/%s' % (engine), error=message)
+
 def network_download(request, engine, network):
 
     # Craft the download HTML response
@@ -359,6 +420,22 @@ def network_download(request, engine, network):
     response['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(days=7)).ctime()
     response['Content-Length'] = os.path.getsize(netfile)
     response['Content-Disposition'] = 'attachment; filename=' + network.sha256
+    return response
+
+def book_download(request, engine, book):
+
+    # Craft the download HTML response
+    bookfile = os.path.join(MEDIA_ROOT, book.sha256)
+    try:
+        fwrapper = FileWrapper(open(bookfile, 'rb'), 8192)
+        response = FileResponse(fwrapper, content_type='application/octet-stream')
+    except FileNotFoundError:
+        return OpenBench.views.redirect(request, '/books/%s' % (engine), error='Book file is missing from disk')
+
+    # Set all headers and return response
+    response['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(days=7)).ctime()
+    response['Content-Length'] = os.path.getsize(bookfile)
+    response['Content-Disposition'] = 'attachment; filename=' + book.name
     return response
 
 def network_edit(request, engine, network):
@@ -398,6 +475,27 @@ def network_edit(request, engine, network):
         network.save()
 
     return OpenBench.views.redirect(request, '/networks/%s' % (network.engine), status='Applied changes')
+
+def book_edit(request, engine, book):
+
+    if request.method == 'GET':
+        return OpenBench.views.render(request, 'book.html', { 'book' : book })
+
+    new_name = request.POST['name']
+
+    # Reject new names that are already in use for this particular engine
+    if new_name != book.name and Book.objects.filter(engine=book.engine, name=new_name):
+        error = 'A Book already exists with the name %s for the %s engine' % (new_name, book.engine)
+        return OpenBench.views.redirect(request, '/books/%s/EDIT/%s' % (book.engine, book.sha256), error=error)
+
+    # Rejecct new names with strange characters
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', new_name):
+        return OpenBench.views.redirect(request, '/books/', error='Valid characters are [a-zA-Z0-9_.-]')
+
+    book.name = new_name
+    book.save()
+
+    return OpenBench.views.redirect(request, '/books/%s' % (book.engine), status='Applied changes')
 
 
 def update_test(request, machine):

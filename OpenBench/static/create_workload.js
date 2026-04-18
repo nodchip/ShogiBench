@@ -1,6 +1,7 @@
 
 var config   = JSON.parse(document.getElementById('json-config'  ).textContent);
 var networks = JSON.parse(document.getElementById('json-networks').textContent);
+var books    = JSON.parse(document.getElementById('json-books'   ).textContent);
 var repos    = JSON.parse(document.getElementById('json-repos'   ).textContent);
 
 function create_network_options(field_id, engine) {
@@ -33,6 +34,36 @@ function create_network_options(field_id, engine) {
         opt.value     = '';
         opt.selected  = !has_default;
         network_options.add(opt);
+    }
+}
+
+function create_book_options(field_id, engine) {
+
+    var book_options = document.getElementById(field_id);
+
+    if (book_options == null)
+        return;
+
+    while (book_options.length)
+        book_options.remove(0);
+
+    for (const book of books) {
+
+        if (book.engine !== engine)
+            continue;
+
+        var opt   = document.createElement('option');
+        opt.text  = book.name;
+        opt.value = book.sha256;
+        book_options.add(opt);
+    }
+
+    {
+        var opt   = document.createElement('option');
+        opt.text  = 'None';
+        opt.value = '';
+        opt.selected = true;
+        book_options.add(opt);
     }
 }
 
@@ -123,6 +154,7 @@ function set_engine(engine, target) {
     document.getElementById(target + '_repo'  ).value = repos[engine] || config.engines[engine].source
 
     create_network_options(target + '_network', engine);
+    create_book_options(target + '_book', engine);
 }
 
 function set_option(option_name, option_value) {

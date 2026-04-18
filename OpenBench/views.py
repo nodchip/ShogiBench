@@ -524,6 +524,47 @@ def networks(request, engine=None, action=None, name=None, client=False):
     # Otherwise we could not find the Network, and cannot do anything
     return redirect(request, '/networks/', error='No network found with matching Sha')
 
+def books(request, engine=None, action=None, name=None):
+
+    # Without an identifier and a valid action, all we can do is view the list
+    if not name or action.upper() not in ['UPLOAD', 'DELETE', 'DOWNLOAD', 'EDIT']:
+        books = Book.objects.all()
+        if engine and engine in OPENBENCH_CONFIG['engines'].keys():
+            books = books.filter(engine=engine)
+        return render(request, 'book.html', { 'books' : list(books.order_by('-id').values()) })
+
+    # Require logins
+    if not request.user.is_authenticated:
+        return django.http.HttpResponseRedirect('/login/')
+
+    # Require approver credentials
+    if not (profile := Profile.objects.filter(user=request.user).first()):
+        return django.http.HttpResponseRedirect('/index/')
+
+    if not profile.approver:
+        return django.http.HttpResponseRedirect('/index/')
+
+    if action.upper() == 'DELETE' and request.method != 'POST':
+        return redirect(request, '/books/%s' % (engine), error='Book deletion requires a POST request')
+
+    # Split out Uploads, since there is no logic to disambiguate the name
+    if action.upper() == 'UPLOAD':
+        return OpenBench.utils.book_upload(request, engine, name)
+
+    # Push off all the actual effort to OpenBench.utils for all actions
+    actions = {
+        'DELETE'   : OpenBench.utils.book_delete,
+        'DOWNLOAD' : OpenBench.utils.book_download,
+        'EDIT'     : OpenBench.utils.book_edit,
+    }
+
+    # Update the Book, if we can find one for the given name/sha256
+    if (book := OpenBench.utils.book_disambiguate(engine, name)):
+        return actions[action.upper()](request, engine, book)
+
+    # Otherwise we could not find the Book, and cannot do anything
+    return redirect(request, '/books/', error='No book found with matching Sha')
+
 def network_form(request):
 
     # Require logins. Clients will be artifically logged in
@@ -537,6 +578,24 @@ def network_form(request):
     # Get requests should not be reaching this point
     if request.method == 'GET':
         return render(request, 'uploadnet.html', {})
+
+def book_form(request):
+
+    # Require logins
+    if not request.user.is_authenticated:
+        return django.http.HttpResponseRedirect('/login/')
+
+    # Require approver credentials
+    if not (profile := Profile.objects.filter(user=request.user).first()):
+        return django.http.HttpResponseRedirect('/index/')
+
+    if not profile.approver:
+        return django.http.HttpResponseRedirect('/index/')
+
+    if request.method == 'GET':
+        return render(request, 'uploadbook.html', {})
+
+    return OpenBench.utils.book_upload(request, request.POST['engine'], request.POST['name'])
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                             OPENBENCH SCRIPTING                             #
@@ -854,6 +913,39 @@ def api_networks(request, engine):
 
     else:
         return api_response({ 'error' : 'Engine not found. Check /api/config/ for a full list' })
+
+@csrf_exempt
+def api_books(request, engine):
+
+    if not api_authenticate(request):
+        return api_response({ 'error' : 'API requires authentication for this server' })
+
+    if engine in OPENBENCH_CONFIG['engines'].keys():
+        books = [
+            OpenBench.model_utils.book_to_dict(book)
+            for book in Book.objects.filter(engine=engine)
+        ]
+        return api_response({ 'books' : books })
+
+    else:
+        return api_response({ 'error' : 'Engine not found. Check /api/config/ for a full list' })
+
+@csrf_exempt
+def api_book_download(request, engine, identifier):
+
+    if not api_authenticate(request):
+        return api_response({ 'error' : 'API requires authentication for this server' })
+
+    if not api_authenticate(request, require_enabled=True):
+        return api_response({ 'error' : 'API requires authentication for this endpoint' })
+
+    if (book := Book.objects.filter(engine=engine, sha256=identifier).first()):
+        return OpenBench.utils.book_download(request, engine, book)
+
+    if (book := Book.objects.filter(engine=engine, name=identifier).first()):
+        return OpenBench.utils.book_download(request, engine, book)
+
+    return api_response({ 'error' : 'Book %s for Engine %s not found' % (identifier, engine) })
 
 @csrf_exempt
 def api_network_download(request, engine, identifier):

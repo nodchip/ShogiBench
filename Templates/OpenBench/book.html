@@ -1,0 +1,80 @@
+{% extends "OpenBench/base.html" %}
+
+{% block content %}
+
+    {% if book %}
+        <form method="POST" action="/books/{{book.engine}}/EDIT/{{book.sha256}}/">
+            {% csrf_token %}
+            <div class="form">
+                <div class="col">
+                    <div class="row">
+                        <label for="hash"> Hash </label>
+                        <input id="hash" readonly value="{{book.sha256}}">
+                    </div>
+
+                    <div class="row">
+                        <label for="engine"> Engine </label>
+                        <input id="engine" readonly value="{{book.engine}}">
+                    </div>
+
+                    <div class="row">
+                        <label for="author"> Author </label>
+                        <input id="author" readonly value="{{book.author}}">
+                    </div>
+
+                    <div class="row">
+                        <label for="created"> Created </label>
+                        <input id="created" readonly value="{{book.created}}">
+                    </div>
+
+                    <div class="row">
+                        <label for="name"> Name </label>
+                        <input id="name" name="name" value="{{book.name}}">
+                    </div>
+
+                    <input class="anchorbutton btn-blue w-100" type="submit" value="Update Book">
+                </div>
+            </div>
+        </form>
+    {% else %}
+        <table id="book-table" class="hoverable">
+            <tr class="table-header">
+                <th>Engine</th>
+                <th>Author</th>
+                <th>Name</th>
+                <th>Hash</th>
+                <th></th>
+                <th></th>
+                <th></th>
+            </tr>
+
+            {% for book in books %}
+                <tr>
+                    <td><a href="/books/{{book.engine}}/">{{book.engine}}</a></td>
+                    <td>{{book.author|capfirst}}</td>
+                    <td><a href="/books/{{book.engine}}/DOWNLOAD/{{book.sha256}}">{{book.name}}</a></td>
+                    <td>{{book.sha256}}</td>
+                    <td>
+                        <a href="/books/{{book.engine}}/EDIT/{{book.sha256}}">
+                            <i class="fa-solid fa-pen-to-square" style="color: grey;"></i>
+                        </a>
+                    </td>
+                    <td>
+                        <form method="POST" action="/books/{{book.engine}}/DELETE/{{book.sha256}}/" onsubmit="return confirm('YOU ARE DELETING THIS BOOK FILE FOREVER')">
+                            {% csrf_token %}
+                            <button type="submit" style="background: none; border: 0; padding: 0; cursor: pointer;">
+                                <i class="fa-solid fa-trash-can" style="color: #A03030;"></i>
+                            </button>
+                        </form>
+                    </td>
+                    <td>
+                        <a href="/books/{{book.engine}}/DOWNLOAD/{{book.sha256}}">
+                            <i class="fa-solid fa-download" style="color: grey;"></i>
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+{% endblock %}

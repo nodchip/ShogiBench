@@ -38,6 +38,16 @@ from OpenBench.models import *
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.workloads.verify_workload import verify_workload
 
+
+def assign_test_book(test, field, engine_field, book_field):
+
+    sha = test.__dict__.get(field, '')
+    if not sha:
+        return
+
+    book = Book.objects.get(engine=test.__dict__[engine_field], sha256=sha)
+    test.__dict__[book_field] = book.name
+
 def create_workload(request, workload_type):
 
     assert workload_type in [ 'TEST', 'TUNE', 'DATAGEN' ]
@@ -50,7 +60,10 @@ def create_workload(request, workload_type):
 
     if request.method == 'GET':
 
-        data = { 'networks' : list(Network.objects.all().values()) }
+        data = {
+            'networks' : list(Network.objects.all().values()),
+            'books'    : list(Book.objects.all().values()),
+        }
 
         if workload_type == 'TEST':
             data['workload']        = workload_type
@@ -121,6 +134,7 @@ def create_new_test(request):
     test.dev_engine        = request.POST['dev_engine']
     test.dev_options       = request.POST['dev_options']
     test.dev_network       = request.POST['dev_network']
+    test.dev_book_sha      = request.POST['dev_book']
     test.dev_time_control  = OpenBench.utils.TimeControl.parse(request.POST['dev_time_control'])
 
     test.base              = get_engine(*base_ingo)
@@ -128,6 +142,7 @@ def create_new_test(request):
     test.base_engine       = request.POST['base_engine']
     test.base_options      = request.POST['base_options']
     test.base_network      = request.POST['base_network']
+    test.base_book_sha     = request.POST['base_book']
     test.base_time_control = OpenBench.utils.TimeControl.parse(request.POST['base_time_control'])
 
     test.workload_size     = int(request.POST['workload_size'])
@@ -162,6 +177,9 @@ def create_new_test(request):
     if test.base_network:
         test.base_netname = Network.objects.get(engine=test.base_engine, sha256=test.base_network).name
 
+    assign_test_book(test, 'dev_book_sha', 'dev_engine', 'dev_book_name')
+    assign_test_book(test, 'base_book_sha', 'base_engine', 'base_book_name')
+
     test.save()
 
     profile = Profile.objects.get(user=request.user)
@@ -189,6 +207,7 @@ def create_new_tune(request):
     test.dev_engine       = test.base_engine       = request.POST['dev_engine']
     test.dev_options      = test.base_options      = request.POST['dev_options']
     test.dev_network      = test.base_network      = request.POST['dev_network']
+    test.dev_book_sha     = test.base_book_sha     = request.POST['dev_book']
     test.dev_time_control = test.base_time_control = OpenBench.utils.TimeControl.parse(request.POST['dev_time_control'])
 
     test.workload_size    = int(request.POST['spsa_pairs_per'])
@@ -211,6 +230,9 @@ def create_new_tune(request):
     if test.dev_network:
         name = Network.objects.get(engine=test.dev_engine, sha256=test.dev_network).name
         test.dev_netname = test.base_netname = name
+
+    assign_test_book(test, 'dev_book_sha', 'dev_engine', 'dev_book_name')
+    test.base_book_name = test.dev_book_name
 
     test.save()
 
@@ -240,6 +262,7 @@ def create_new_datagen(request):
     test.dev_engine        = request.POST['dev_engine']
     test.dev_options       = request.POST['dev_options']
     test.dev_network       = request.POST['dev_network']
+    test.dev_book_sha      = request.POST['dev_book']
     test.dev_time_control  = OpenBench.utils.TimeControl.parse(request.POST['dev_time_control'])
 
     test.base              = get_engine(*base_ingo)
@@ -247,6 +270,7 @@ def create_new_datagen(request):
     test.base_engine       = request.POST['base_engine']
     test.base_options      = request.POST['base_options']
     test.base_network      = request.POST['base_network']
+    test.base_book_sha     = request.POST['base_book']
     test.base_time_control = OpenBench.utils.TimeControl.parse(request.POST['base_time_control'])
 
     test.max_games         = int(request.POST['datagen_max_games'])
@@ -276,6 +300,9 @@ def create_new_datagen(request):
 
     if test.base_network:
         test.base_netname = Network.objects.get(engine=test.base_engine, sha256=test.base_network).name
+
+    assign_test_book(test, 'dev_book_sha', 'dev_engine', 'dev_book_name')
+    assign_test_book(test, 'base_book_sha', 'base_engine', 'base_book_name')
 
     test.save()
 

@@ -483,6 +483,7 @@ class MatchRunner:
         # Extract configuration from the Workload
         options = config.workload['test'][branch]['options']
         network = config.workload['test'][branch]['network']
+        book    = config.workload['test'][branch].get('book')
         private = config.workload['test'][branch]['private']
         engine  = config.workload['test'][branch]['engine']
         syzygy  = config.workload['test']['syzygy_wdl']
@@ -496,6 +497,12 @@ class MatchRunner:
         if private and network and network != 'None':
             options += ' EvalFile=%s' % (os.path.join('../Networks', network))
             name    += '-%s' % (network)
+
+        # Engine books are distributed separately and injected via USI options
+        if book and book != 'None':
+            options += ' BookFile=%s' % (book)
+            options += ' BookDir=%s' % (os.path.join('..', 'Books'))
+            name    += '-%s' % (book)
 
         # Set the SyzygyPath if we have them, and are allowed to use them
         if syzygy != 'DISABLED' and config.syzygy_max:
@@ -1128,6 +1135,8 @@ def complete_workload(config):
     # Download each NNUE file, throws an exception on corruption
     dev_network  = safe_download_network_weights(config, 'dev' )
     base_network = safe_download_network_weights(config, 'base')
+    safe_download_engine_book(config, 'dev')
+    safe_download_engine_book(config, 'base')
 
     # Build or download each engine, or exit if an error occured
     dev_name  = safe_download_engine(config, 'dev' , dev_network )
@@ -1199,6 +1208,25 @@ def safe_download_network_weights(config, branch):
     utils.download_network(*credentials, engine, net_name, net_sha, net_path)
 
     return net_path
+
+def safe_download_engine_book(config, branch):
+
+    # Wraps utils.py:download_book()
+    # May raise utils.OpenBenchCorruptedBookException
+
+    engine    = config.workload['test'][branch]['engine']
+    book_name = config.workload['test'][branch].get('book_name')
+    book_sha  = config.workload['test'][branch].get('book')
+    book_path = os.path.join('Books', book_sha) if book_sha else None
+
+    # Not all engines use Book files
+    if not book_sha or book_sha == 'None':
+        return None
+
+    credentials = (config.server, config.username, config.password)
+    utils.download_book(*credentials, engine, book_name, book_sha, book_path)
+
+    return book_path
 
 def safe_download_engine(config, branch, net_path):
 

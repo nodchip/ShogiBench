@@ -18,7 +18,21 @@ def network_delete(network) -> (str, bool):
     sha256 = network.sha256; network.delete()
 
     # Only delete the actual file if no other engines use it
-    if not Network.objects.filter(sha256=sha256):
+    if not Network.objects.filter(sha256=sha256) and not Book.objects.filter(sha256=sha256):
+        FileSystemStorage().delete(sha256)
+
+    return status, True
+
+
+def book_to_dict(book):
+    return { **model_to_dict(book, exclude=['id']), 'created': str(book.created) }
+
+
+def book_delete(book) -> (str, bool):
+    status = 'Deleted %s for %s' % (book.name, book.engine)
+    sha256 = book.sha256; book.delete()
+
+    if not Book.objects.filter(sha256=sha256) and not Network.objects.filter(sha256=sha256):
         FileSystemStorage().delete(sha256)
 
     return status, True

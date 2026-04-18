@@ -101,6 +101,10 @@ class Test(Model):
     # Opening book settings
     book_name  = CharField(max_length=32)
     book_index = IntegerField(default=1)
+    dev_book_sha  = CharField(max_length=8, blank=True, default='')
+    dev_book_name = CharField(max_length=64, blank=True, default='')
+    base_book_sha  = CharField(max_length=8, blank=True, default='')
+    base_book_name = CharField(max_length=64, blank=True, default='')
 
     # Dev Engine, and all of its settings
     dev              = ForeignKey('Engine', PROTECT, related_name='dev')
@@ -218,6 +222,17 @@ class Network(Model):
     engine      = CharField(max_length=64)
     author      = CharField(max_length=64)
     created     = DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return '[{}] {} ({})'.format(self.engine, self.name, self.sha256)
+
+class Book(Model):
+
+    sha256   = CharField(max_length=8)
+    name     = CharField(max_length=64)
+    engine   = CharField(max_length=64)
+    author   = CharField(max_length=64)
+    created  = DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return '[{}] {} ({})'.format(self.engine, self.name, self.sha256)

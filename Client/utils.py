@@ -313,6 +313,34 @@ def download_network(server, username, password, engine, net_name, net_sha, net_
         os.remove(net_path)
         raise OpenBenchCorruptedNetworkException('Invalid SHA for %s' % (net_name))
 
+def download_book(server, username, password, engine, book_name, book_sha, book_path):
+
+    # Avoid redownloading Book files
+    if not os.path.isfile(book_path):
+
+        # Format the API request, including credentials
+        print('Fetching %s (%s) for %s' % (book_name, book_sha, engine))
+        endpoint = 'api/books/%s/%s' % (engine, book_sha)
+        request  = credentialed_request(server, username, password, endpoint)
+
+        with open(book_path, 'wb') as fout:
+            for chunk in request.iter_content(chunk_size=1024):
+                if chunk: fout.write(chunk)
+            fout.flush()
+
+    else:
+        print('Found %s (%s) for %s' % (book_name, book_sha, engine))
+
+    # Check for the first 8 characters of the sha256
+    print('Verifying %s (%s) for %s\n' % (book_name, book_sha, engine))
+    with open(book_path, 'rb') as book:
+        sha256 = hashlib.sha256(book.read()).hexdigest()[:8]
+
+    # Verify the download and delete partial or corrupted ones
+    if book_sha.upper() != sha256.upper():
+        os.remove(book_path)
+        raise OpenBenchCorruptedBookException('Invalid SHA for %s' % (book_name))
+
 def download_public_engine(engine, net_path, branch, source, make_path, out_path, compiler=None):
 
     # Check to see if we already have the binary

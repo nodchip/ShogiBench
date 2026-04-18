@@ -54,6 +54,13 @@ urlpatterns = [
     django.urls.path(r'networks/<str:engine>/<str:action>/<str:name>/', OpenBench.views.networks),
     django.urls.path(r'newNetwork/', OpenBench.views.network_form),
 
+    # Links for viewing and managing Books
+    django.urls.path(r'books/', OpenBench.views.books),
+    django.urls.path(r'books/<str:engine>/', OpenBench.views.books),
+    django.urls.path(r'books/<str:engine>/<str:action>/', OpenBench.views.books),
+    django.urls.path(r'books/<str:engine>/<str:action>/<str:name>/', OpenBench.views.books),
+    django.urls.path(r'newBook/', OpenBench.views.book_form),
+
     # Links for interacting with OpenBench via scripting
     django.urls.path(r'scripts/', OpenBench.views.scripts),
 
@@ -77,6 +84,8 @@ urlpatterns = [
     django.urls.path(r'api/networks/<str:engine>/', OpenBench.views.api_networks),
     django.urls.path(r'api/networks/<str:engine>/<str:identifier>/', OpenBench.views.api_network_download),
     django.urls.path(r'api/networks/<str:engine>/<str:identifier>/delete/', OpenBench.views.api_network_delete),
+    django.urls.path(r'api/books/<str:engine>/', OpenBench.views.api_books),
+    django.urls.path(r'api/books/<str:engine>/<str:identifier>/', OpenBench.views.api_book_download),
     django.urls.path(r'api/buildinfo/', OpenBench.views.api_build_info),
     django.urls.path(r'api/pgns/<int:pgn_id>/', OpenBench.views.api_pgns),
 
