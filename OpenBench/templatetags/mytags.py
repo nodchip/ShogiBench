@@ -324,6 +324,22 @@ def network_download_link(workload, branch):
 
     return '/networks/%s/' % (engine)
 
+def engine_book_download_link(workload, branch):
+
+    assert branch in [ 'dev', 'base' ]
+
+    sha    = workload.dev_book_sha  if branch == 'dev' else workload.base_book_sha
+    engine = workload.dev_engine    if branch == 'dev' else workload.base_engine
+
+    if not sha:
+        return None
+
+    # Book could have been deleted after this workload was finished
+    if OpenBench.models.Book.objects.filter(sha256=sha, engine=engine).first():
+        return '/books/%s/DOWNLOAD/%s/' % (engine, sha)
+
+    return '/books/%s/' % (engine)
+
 def workload_url(workload):
 
     # Might be a workload id
@@ -376,6 +392,7 @@ register.filter('spsa_optimal_values', spsa_optimal_values)
 
 register.filter('book_download_link', book_download_link)
 register.filter('network_download_link', network_download_link)
+register.filter('engine_book_download_link', engine_book_download_link)
 
 register.filter('workload_url', workload_url)
 register.filter('workload_pretty_name', workload_pretty_name)
