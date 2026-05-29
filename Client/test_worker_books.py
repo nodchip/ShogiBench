@@ -7,6 +7,21 @@ import worker
 
 
 class WorkerBookTests(unittest.TestCase):
+    def make_benchmark_config(self):
+        return types.SimpleNamespace(
+            threads=64,
+            workload={
+                "test": {
+                    "id": 1,
+                    "dev": {
+                        "name": "dev-engine",
+                        "private": False,
+                        "bench": "123",
+                    }
+                }
+            },
+        )
+
     def test_engine_settings_adds_bookfile_and_bookonthefly(self):
         config = types.SimpleNamespace(
             syzygy_max=0,
@@ -68,6 +83,66 @@ class WorkerBookTests(unittest.TestCase):
             "ABCDEF12",
             os.path.join("Books", "ABCDEF12"),
         )
+
+    def test_safe_run_benchmarks_warms_up_before_full_benchmark(self):
+        config = self.make_benchmark_config()
+
+        with patch.object(worker.bench, "run_benchmark", side_effect=[(100, 123), (1000, 123)]) as run_benchmark:
+            speed = worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
+
+        self.assertEqual(speed, 1000)
+        self.assertEqual(run_benchmark.call_args_list[0].args, (
+            os.path.join("Engines", "engine.exe"),
+            None,
+            False,
+            1,
+            1,
+            123,
+        ))
+        self.assertEqual(run_benchmark.call_args_list[1].args, (
+            os.path.join("Engines", "engine.exe"),
+            None,
+            False,
+            64,
+            1,
+            123,
+        ))
+
+    def test_safe_run_benchmarks_retries_timeout_once_with_warmup(self):
+        config = self.make_benchmark_config()
+        timeout = worker.utils.OpenBenchBadBenchException(
+            "[Engines\\engine.exe] Bench Exceeded Max Duration"
+        )
+
+        with patch.object(worker.bench, "run_benchmark", side_effect=[
+            (100, 123),
+            timeout,
+            (110, 123),
+            (1000, 123),
+        ]) as run_benchmark:
+            with patch.object(worker.ServerReporter, "report_bad_bench") as report_bad_bench:
+                speed = worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
+
+        self.assertEqual(speed, 1000)
+        self.assertEqual(run_benchmark.call_args_list[0].args[3], 1)
+        self.assertEqual(run_benchmark.call_args_list[1].args[3], 64)
+        self.assertEqual(run_benchmark.call_args_list[2].args[3], 1)
+        self.assertEqual(run_benchmark.call_args_list[3].args[3], 64)
+        report_bad_bench.assert_not_called()
+
+    def test_safe_run_benchmarks_does_not_retry_non_timeout_error(self):
+        config = self.make_benchmark_config()
+        wrong_bench = worker.utils.OpenBenchBadBenchException(
+            "[engine.exe] Wrong Bench: 456"
+        )
+
+        with patch.object(worker.bench, "run_benchmark", side_effect=[(100, 123), wrong_bench]) as run_benchmark:
+            with patch.object(worker.ServerReporter, "report_bad_bench") as report_bad_bench:
+                with self.assertRaises(worker.utils.OpenBenchBadBenchException):
+                    worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
+
+        self.assertEqual(run_benchmark.call_count, 2)
+        report_bad_bench.assert_called_once_with(config, "[engine.exe] Wrong Bench: 456")
 
 
 if __name__ == "__main__":

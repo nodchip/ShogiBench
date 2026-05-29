@@ -1300,14 +1300,24 @@ def safe_run_benchmarks(config, branch, engine, network):
     expected = int(config.workload['test'][branch]['bench'])
     binary   = os.path.join('Engines', engine)
 
-    try:
-        print('\nRunning %dx Benchmarks for %s' % (config.threads, name))
-        speed, nodes = bench.run_benchmark(
-            binary, network, private, config.threads, 1, expected)
+    for attempt in range(2):
+        try:
+            print('\nWarming up Benchmark for %s' % (name))
+            bench.run_benchmark(binary, network, private, 1, 1, expected)
 
-    except utils.OpenBenchBadBenchException as error:
-        ServerReporter.report_bad_bench(config, error.message)
-        raise
+            print('\nRunning %dx Benchmarks for %s' % (config.threads, name))
+            speed, nodes = bench.run_benchmark(
+                binary, network, private, config.threads, 1, expected)
+            break
+
+        except utils.OpenBenchBadBenchException as error:
+            timeout = 'Bench Exceeded Max Duration' in error.message
+            if timeout and attempt == 0:
+                print('\nBench exceeded max duration for %s; retrying once' % (name))
+                continue
+
+            ServerReporter.report_bad_bench(config, error.message)
+            raise
 
     print('Bench for %s is %d' % (name, nodes))
     print('Speed for %s is %d' % (name, speed))
