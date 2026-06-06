@@ -46,6 +46,14 @@
         <div class="form">
             <div class="col" id="engines-container">
 
+                <div class="row">
+                    <label for="completion-emails">Email on Completion</label>
+                    <span>
+                        <input id="completion-emails" type="checkbox" name="completion-emails"
+                            {% if profile.completion_emails %}checked{% endif %}>
+                    </span>
+                </div>
+
                 <!-- Display engines which have repos already defined -->
                 {% for engine, repo in profile.repos.items %}
                 <div class="row" id="engine-row-{{ engine }}">

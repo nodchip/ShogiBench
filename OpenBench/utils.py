@@ -498,6 +498,35 @@ def book_edit(request, engine, book):
     return OpenBench.views.redirect(request, '/books/%s' % (book.engine), status='Applied changes')
 
 
+def send_completion_email(request, test):
+
+    profile = Profile.objects.filter(
+        user__username=test.author,
+        completion_emails=True,
+        user__email__gt='',
+    ).select_related('user').first()
+
+    if not profile:
+        return
+
+    workload_name = test.workload_type_str().capitalize()
+    workload_url = request.build_absolute_uri('/%s/%d/' % (test.workload_type_str(), test.id))
+    result = 'passed' if test.passed else 'failed' if test.failed else 'finished'
+
+    profile.user.email_user(
+        'Workload #%d %s' % (test.id, result),
+        '\n'.join([
+            'Your %s workload has completed.' % (workload_name),
+            '',
+            'Workload: #%d' % (test.id),
+            'Result: %s' % (result),
+            'Games: %d' % (test.games),
+            'URL: %s' % (workload_url),
+        ]),
+        fail_silently=True,
+    )
+
+
 def update_test(request, machine):
 
     # Extract error information
@@ -523,6 +552,8 @@ def update_test(request, machine):
 
         if test.finished or test.deleted:
             return { 'stop' : True }
+
+        was_finished = test.finished
 
         test.losses += losses # Trinomial
         test.draws  += draws
@@ -576,6 +607,11 @@ def update_test(request, machine):
             test.passed = test.finished = test.games >= test.max_games
 
         test.save()
+
+        completed = not was_finished and test.finished
+
+    if completed:
+        send_completion_email(request, test)
 
     # Update Result object; No risk from concurrent access
     Result.objects.filter(id=result_id).update(

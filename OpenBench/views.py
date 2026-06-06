@@ -222,6 +222,11 @@ def profile_config(request):
 
     changes = ''
 
+    completion_emails = 'completion-emails' in request.POST
+    if completion_emails != profile.completion_emails:
+        profile.completion_emails = completion_emails
+        changes += 'Enabled completion email notifications\n' if completion_emails else 'Disabled completion email notifications\n'
+
     if (engine := request.POST.get('default-status', profile.engine)) != profile.engine:
         changes += 'Set %s as the default, replacing %s\n' % (engine, profile.engine)
         profile.engine = engine

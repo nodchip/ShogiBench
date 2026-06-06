@@ -40,6 +40,7 @@ class Profile(Model):
     tests    = IntegerField(default=0)
     repos    = JSONField(default=dict, blank=True, null=True)
     engine   = CharField(max_length=128, blank=True)
+    completion_emails = BooleanField(default=False)
     enabled  = BooleanField(default=False)
     approver = BooleanField(default=False)
     updated  = DateTimeField(auto_now=True)
