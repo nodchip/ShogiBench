@@ -50,6 +50,7 @@ from concurrent.futures import ThreadPoolExecutor
 import bench
 import genfens
 import pgn_util
+import shogi_result
 import utils
 
 ## Local imports from client are an exception
@@ -356,6 +357,10 @@ class ServerReporter:
                     delta = param['r'] * param['c'] * result * param['flip'][batch['runner_idx']]
                     payload['spsa_%s' % (name)] = payload.get('spsa_%s' % (name), 0.0) + delta
 
+        if any('side_stats_games' in batch for batch in batches):
+            for field in shogi_result.SIDE_STAT_FIELDS:
+                payload[field] = sum(batch.get(field, 0) for batch in batches)
+
         # Collapse into a JSON friendly format for Django
         payload['trinomial'  ] = ' '.join(map(str, payload['trinomial'  ]))
         payload['pentanomial'] = ' '.join(map(str, payload['pentanomial']))
@@ -526,7 +531,7 @@ class MatchRunner:
         return '-pgnout file=%s seldepth=true nodes=true' % (MatchRunner.pgn_name(config, timestamp, runner_idx))
 
     @staticmethod
-    def update_results(results, line):
+    def update_results(results, line, is_shogi=False):
 
         # Given any game #, find the other in the pair
         def game_to_pair(g):
@@ -543,18 +548,28 @@ class MatchRunner:
             return lookup[r1], 2 - lookup[r2]
 
         # Extract the game # and result str from a match runner output line
-        def parse_finished_game(line):
+        def parse_legacy_finished_game(line):
             tokens = line.split()
             return int(tokens[2]), tokens[6]
 
+        if is_shogi:
+            finished_game = shogi_result.parse_finished_game(line)
+            if finished_game is None:
+                print('[Warning] Unable to parse SHOGI side statistics: %s' % line)
+            else:
+                try:
+                    shogi_result.add_finished_game(results, finished_game)
+                except ValueError as error:
+                    print('[Warning] Unable to parse SHOGI side statistics: %s' % error)
+
         # Parse for errors resulting in adjudication
-        reason = line.split(':')[1]
+        reason = line.split(':', 1)[1]
         results['crashes'   ] += 'disconnect' in reason or 'stalls' in reason
         results['timelosses'] += 'on time' in reason
         results['illegals'  ] += 'illegal' in reason
 
         # Parse Game # and result, and save
-        game, result = parse_finished_game(line)
+        game, result = parse_legacy_finished_game(line)
         results['games'][game] = result
 
         # Check to see if the Pair has finished
@@ -1340,6 +1355,7 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
 
     print('\n[#%d] Launching match runner...\n%s\n' % (runner_idx, command))
     runner = Popen(command.split(), stdout=PIPE)
+    is_shogi = MatchRunner.is_shogi(config)
 
     results = {
 
@@ -1351,6 +1367,9 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
         'timelosses'  : 0,               # " loses on time "
         'illegals'    : 0,               # " illegal move "
     }
+
+    if is_shogi:
+        results.update(shogi_result.new_side_stats())
 
     while True:
 
@@ -1366,20 +1385,25 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
             print('[#%d] %s' % (runner_idx, line))
 
         if 'Finished game' in line:
-            MatchRunner.update_results(results, line)
+            MatchRunner.update_results(results, line, is_shogi=is_shogi)
 
         # Add to the results queue every time we have a game-pair finished
         if any(results['pentanomial']):
 
             # Place the results into the Queue, and be sure to copy the lists
-            results_queue.put({
+            batch = {
                 'trinomial'     : list(results['trinomial']),
                 'pentanomial'   : list(results['pentanomial']),
                 'crashes'       : results['crashes'],
                 'timelosses'    : results['timelosses'],
                 'illegals'      : results['illegals'],
                 'runner_idx'    : runner_idx,
-            })
+            }
+
+            if is_shogi:
+                batch.update({field: results[field] for field in shogi_result.SIDE_STAT_FIELDS})
+
+            results_queue.put(batch)
 
             # Clear out all the results, so we can start collecting a new set
             results['trinomial'  ] = [0, 0, 0]
@@ -1387,6 +1411,10 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
             results['crashes'    ] = 0
             results['timelosses' ] = 0
             results['illegals'   ] = 0
+
+            if is_shogi:
+                for field in shogi_result.SIDE_STAT_FIELDS:
+                    results[field] = 0
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                           #
@@ -1399,11 +1427,13 @@ def reload_local_imports():
     import bench
     import genfens
     import pgn_util
+    import shogi_result
     import utils
 
     importlib.reload(bench)
     importlib.reload(genfens)
     importlib.reload(pgn_util)
+    importlib.reload(shogi_result)
     importlib.reload(utils)
 
 def parse_arguments(client_args):
