@@ -19,7 +19,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import re, django
-import OpenBench.config, OpenBench.utils, OpenBench.stats, OpenBench.models
+import OpenBench.config, OpenBench.utils, OpenBench.stats, OpenBench.models, OpenBench.side_stats
 
 def oneDigitPrecision(value):
     try:
@@ -111,6 +111,10 @@ def longStatBlock(test):
 
     if test.use_penta:
         lines.append('Penta | [%d, %d, %d, %d, %d]' % test.as_penta())
+
+    side_stats = OpenBench.side_stats.format_side_stats(test)
+    if side_stats:
+        lines.extend(['', side_stats])
 
     return '\n'.join(lines)
 

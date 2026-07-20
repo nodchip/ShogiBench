@@ -1,7 +1,9 @@
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
+from OpenBench import side_stats
 from OpenBench.models import Engine, Machine, Profile, Result, Test
+from OpenBench.templatetags.mytags import longStatBlock, shortStatBlock
 from OpenBench.utils import update_test
 
 
@@ -173,3 +175,123 @@ class SideStatsIngestionTests(TestCase):
 
         self.assertIn("error", response)
         self.assert_database_unchanged()
+
+
+class SideStatsFormattingTests(TestCase):
+    """Long Stat Block 用の先後別統計表示を確認する。"""
+
+    def make_test(self):
+        """承認済み表示例と同じ完全な将棋統計を生成する。"""
+        test = Test(
+            author="author",
+            book_name="sample-shogi.epd",
+            test_mode="GAMES",
+            dev_options="Threads=1 Hash=16",
+            dev_time_control="8.0+0.08",
+            max_games=1000,
+            use_penta=True,
+            games=1000,
+            wins=510,
+            losses=440,
+            draws=50,
+            LL=50,
+            LD=90,
+            DD=125,
+            DW=135,
+            WW=100,
+            side_stats_games=1000,
+            dev_sente_wins=270,
+            dev_gote_wins=240,
+            base_sente_wins=235,
+            base_gote_wins=205,
+            dev_sente_draws=25,
+            dev_gote_draws=25,
+            dev_sente_impasse_wins=2,
+            dev_gote_impasse_wins=1,
+            base_sente_impasse_wins=1,
+            base_gote_impasse_wins=0,
+        )
+        return test
+
+    def clear_side_stats(self, test):
+        """表示境界ケース用に全カウンタを 0 へ戻す。"""
+        for field in SIDE_STAT_FIELDS:
+            setattr(test, field, 0)
+
+    def test_formats_complete_side_statistics(self):
+        """承認済みの Long Stat Block 追加部分を固定幅で生成する。"""
+        expected = "\n".join([
+            "Side results",
+            "Sente  | W: 505/1000 (50.5%)",
+            "Gote   | W: 445/1000 (44.5%)",
+            "Draw   | D:  50/1000 ( 5.0%)",
+            "",
+            "Engine results",
+            "Engine | Overall W        | Sente W         | Gote W          | Draw S/G",
+            "Dev    | 510/1000 (51.0%) | 270/500 (54.0%) | 240/500 (48.0%) | 25 / 25",
+            "Base   | 440/1000 (44.0%) | 235/500 (47.0%) | 205/500 (41.0%) | 25 / 25",
+            "",
+            "Impasse declarations",
+            "Total  | 4  (Sente: 3, Gote: 1)",
+            "Dev    | 3  (Sente: 2, Gote: 1)",
+            "Base   | 1  (Sente: 1, Gote: 0)",
+        ])
+
+        self.assertEqual(side_stats.format_side_stats(self.make_test()), expected)
+
+    def test_partial_coverage_uses_detailed_game_denominator(self):
+        """一部取得時は coverage を示し、割合の分母を詳細対局数にする。"""
+        test = self.make_test()
+        self.clear_side_stats(test)
+        test.side_stats_games = 800
+        test.dev_sente_wins = 200
+        test.dev_gote_wins = 200
+        test.base_sente_wins = 180
+        test.base_gote_wins = 170
+        test.dev_sente_draws = 25
+        test.dev_gote_draws = 25
+
+        output = side_stats.format_side_stats(test)
+
+        self.assertTrue(output.startswith("Side stats coverage | N: 800/1000 (partial)\n"))
+        self.assertIn("Sente  | W: 380/800 (47.5%)", output)
+
+    def test_legacy_worker_data_is_marked_unavailable(self):
+        """対局済みで coverage 0 の将棋 workload は旧データと表示する。"""
+        test = self.make_test()
+        self.clear_side_stats(test)
+
+        self.assertEqual(
+            side_stats.format_side_stats(test),
+            "Side stats | unavailable (legacy worker data)",
+        )
+
+    def test_zero_engine_side_denominator_is_na(self):
+        """エンジンが一度も持っていない側の割合を N/A とする。"""
+        test = self.make_test()
+        self.clear_side_stats(test)
+        test.games = 1
+        test.side_stats_games = 1
+        test.dev_sente_wins = 1
+
+        output = side_stats.format_side_stats(test)
+
+        self.assertIn("0/0 (N/A)", output)
+
+    def test_omits_side_stats_for_non_shogi_and_empty_workloads(self):
+        """非将棋または対局数 0 の workload には追加表示しない。"""
+        non_shogi = self.make_test()
+        non_shogi.book_name = "startpos.epd"
+        empty_shogi = self.make_test()
+        empty_shogi.games = 0
+        empty_shogi.side_stats_games = 0
+
+        self.assertEqual(side_stats.format_side_stats(non_shogi), "")
+        self.assertEqual(side_stats.format_side_stats(empty_shogi), "")
+
+    def test_only_long_stat_block_contains_side_statistics(self):
+        """Long Stat Block だけへ追加し、Short Stat Block を変えない。"""
+        test = self.make_test()
+
+        self.assertIn("Side results", longStatBlock(test))
+        self.assertNotIn("Side results", shortStatBlock(test))
