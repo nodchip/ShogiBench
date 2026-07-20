@@ -40,6 +40,7 @@ from OpenSite.settings import MEDIA_ROOT, PROJECT_PATH
 
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.models import *
+from OpenBench.side_stats import SIDE_STAT_FIELDS, parse_side_stats_payload
 from OpenBench.stats import TrinomialSPRT, PentanomialSPRT
 
 
@@ -546,6 +547,11 @@ def update_test(request, machine):
     # Pentanomial Implementation
     LL, LD, DD, DW, WW = map(int, request.POST['pentanomial'].split())
 
+    try:
+        side_stats = parse_side_stats_payload(request.POST, games)
+    except ValueError as error:
+        return { 'error' : str(error) }
+
     with transaction.atomic():
 
         test = Test.objects.select_for_update().get(id=test_id)
@@ -564,6 +570,10 @@ def update_test(request, machine):
         test.DW     += DW
         test.WW     += WW
         test.games  += games  # Overall
+
+        if side_stats is not None:
+            for field in SIDE_STAT_FIELDS:
+                setattr(test, field, getattr(test, field) + side_stats[field])
 
         # Consider only Crashes or Illegal moves as real errors
         test.error = bool(test.error or crashes or illegals)
@@ -614,20 +624,28 @@ def update_test(request, machine):
         send_completion_email(request, test)
 
     # Update Result object; No risk from concurrent access
-    Result.objects.filter(id=result_id).update(
-        games    = F('games'   ) + games,
-        losses   = F('losses'  ) + losses,
-        draws    = F('draws'   ) + draws,
-        wins     = F('wins'    ) + wins,
-        LL       = F('LL'      ) + LL,
-        LD       = F('LD'      ) + LD,
-        DD       = F('DD'      ) + DD,
-        DW       = F('DW'      ) + DW,
-        WW       = F('WW'      ) + WW,
-        crashes  = F('crashes' ) + crashes,
-        timeloss = F('timeloss') + timelosses,
-        updated  = timezone.now()
-    )
+    result_updates = {
+        'games'    : F('games'   ) + games,
+        'losses'   : F('losses'  ) + losses,
+        'draws'    : F('draws'   ) + draws,
+        'wins'     : F('wins'    ) + wins,
+        'LL'       : F('LL'      ) + LL,
+        'LD'       : F('LD'      ) + LD,
+        'DD'       : F('DD'      ) + DD,
+        'DW'       : F('DW'      ) + DW,
+        'WW'       : F('WW'      ) + WW,
+        'crashes'  : F('crashes' ) + crashes,
+        'timeloss' : F('timeloss') + timelosses,
+        'updated'  : timezone.now(),
+    }
+
+    if side_stats is not None:
+        result_updates.update({
+            field: F(field) + side_stats[field]
+            for field in SIDE_STAT_FIELDS
+        })
+
+    Result.objects.filter(id=result_id).update(**result_updates)
 
     # Update Profile object; No risk from concurrent access
     Profile.objects.filter(user=Machine.objects.get(id=machine_id).user).update(

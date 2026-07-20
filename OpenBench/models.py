@@ -85,6 +85,19 @@ class Result(Model):
     crashes  = IntegerField(default=0)
     timeloss = IntegerField(default=0)
 
+    # 将棋の先後別統計
+    side_stats_games = IntegerField(default=0)
+    dev_sente_wins = IntegerField(default=0)
+    dev_gote_wins = IntegerField(default=0)
+    base_sente_wins = IntegerField(default=0)
+    base_gote_wins = IntegerField(default=0)
+    dev_sente_draws = IntegerField(default=0)
+    dev_gote_draws = IntegerField(default=0)
+    dev_sente_impasse_wins = IntegerField(default=0)
+    dev_gote_impasse_wins = IntegerField(default=0)
+    base_sente_impasse_wins = IntegerField(default=0)
+    base_gote_impasse_wins = IntegerField(default=0)
+
     def __str__(self):
         return '{0} {1}'.format(self.test.dev.name, self.machine.__str__())
 
@@ -164,6 +177,19 @@ class Test(Model):
     DD     = IntegerField(default=0) # Pentanomial
     DW     = IntegerField(default=0) # Pentanomial
     WW     = IntegerField(default=0) # Pentanomial
+
+    # 将棋の先後別統計
+    side_stats_games = IntegerField(default=0)
+    dev_sente_wins = IntegerField(default=0)
+    dev_gote_wins = IntegerField(default=0)
+    base_sente_wins = IntegerField(default=0)
+    base_gote_wins = IntegerField(default=0)
+    dev_sente_draws = IntegerField(default=0)
+    dev_gote_draws = IntegerField(default=0)
+    dev_sente_impasse_wins = IntegerField(default=0)
+    dev_gote_impasse_wins = IntegerField(default=0)
+    base_sente_impasse_wins = IntegerField(default=0)
+    base_gote_impasse_wins = IntegerField(default=0)
 
     # Switching all future tests to Pentanomial
     use_tri   = BooleanField(default=False)
