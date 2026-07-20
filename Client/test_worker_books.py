@@ -1,7 +1,12 @@
+import os
+import sys
 import types
 import unittest
-import os
 from unittest.mock import patch
+
+CLIENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+if CLIENT_DIRECTORY not in sys.path:
+    sys.path.insert(0, CLIENT_DIRECTORY)
 
 import worker
 
