@@ -553,12 +553,15 @@ class MatchRunner:
             return int(tokens[2]), tokens[6]
 
         if is_shogi:
+            side_games = results.setdefault('side_games', {})
             finished_game = shogi_result.parse_finished_game(line)
             if finished_game is None:
                 print('[Warning] Unable to parse SHOGI side statistics: %s' % line)
             else:
                 try:
-                    shogi_result.add_finished_game(results, finished_game)
+                    side_stats = shogi_result.new_side_stats()
+                    shogi_result.add_finished_game(side_stats, finished_game)
+                    side_games[finished_game.game] = side_stats
                 except ValueError as error:
                     print('[Warning] Unable to parse SHOGI side statistics: %s' % error)
 
@@ -585,6 +588,13 @@ class MatchRunner:
         results['trinomial'  ][t1] += 1
         results['trinomial'  ][t2] += 1
         results['pentanomial'][p ] += 1
+
+        if is_shogi:
+            for completed_game in (first, second):
+                side_stats = side_games.pop(completed_game, None)
+                if side_stats is not None:
+                    for field in shogi_result.SIDE_STAT_FIELDS:
+                        results[field] += side_stats[field]
 
         # Clean up results['games']
         del results['games'][first]
@@ -1370,6 +1380,7 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
 
     if is_shogi:
         results.update(shogi_result.new_side_stats())
+        results['side_games'] = {}
 
     while True:
 

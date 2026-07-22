@@ -96,6 +96,26 @@ class WorkerSideStatsTests(unittest.TestCase):
         self.assertEqual(results["side_stats_games"], 0)
         self.assertTrue(any("side statistics" in str(call) for call in output.call_args_list))
 
+    def test_side_parse_failure_for_pair_keeps_legacy_pair_result(self):
+        """pair の両局で role 解析に失敗しても従来の pair 結果を残す。"""
+        results = self.make_results()
+
+        with patch("builtins.print"):
+            worker.MatchRunner.update_results(
+                results,
+                "Finished game 1 (A-dev vs B-dev): 1-0 {Sente wins}",
+                is_shogi=True,
+            )
+            worker.MatchRunner.update_results(
+                results,
+                "Finished game 2 (B-dev vs A-dev): 0-1 {Gote wins}",
+                is_shogi=True,
+            )
+
+        self.assertEqual(sum(results["trinomial"]), 2)
+        self.assertEqual(sum(results["pentanomial"]), 1)
+        self.assertEqual(results["side_stats_games"], 0)
+
     def test_runner_enqueues_side_stats_only_for_shogi(self):
         """SHOGI の pair だけ追加カウンタを queue へ含める。"""
         output = (
@@ -129,6 +149,62 @@ class WorkerSideStatsTests(unittest.TestCase):
                     self.assertEqual(batch["side_stats_games"], 2)
                     self.assertEqual(batch["dev_sente_wins"], 1)
                     self.assertEqual(batch["dev_gote_wins"], 1)
+
+    def test_runner_batches_side_stats_by_completed_pair(self):
+        """並行対局の完了順が前後しても完成 pair だけを batch に含める。"""
+        output = (
+            b"Finished game 1 (A-dev vs B-base): 1-0 {Sente wins}\n"
+            b"Finished game 3 (A-dev vs B-base): 1-0 {Sente wins}\n"
+            b"Finished game 2 (B-base vs A-dev): 0-1 {Gote wins}\n"
+            b"Finished game 4 (B-base vs A-dev): 0-1 {Gote wins}\n"
+        )
+        config = types.SimpleNamespace(
+            workload={"test": {"book": {"name": "sample-shogi.epd"}}}
+        )
+        result_queue = queue.Queue()
+        process = types.SimpleNamespace(stdout=io.BytesIO(output))
+
+        with patch.object(worker, "Popen", return_value=process):
+            worker.run_and_parse_runner(
+                config,
+                "runner --games 4",
+                0,
+                result_queue,
+                threading.Event(),
+            )
+
+        batches = [result_queue.get_nowait(), result_queue.get_nowait()]
+        self.assertTrue(result_queue.empty())
+        for batch in batches:
+            self.assertEqual(sum(batch["trinomial"]), 2)
+            self.assertEqual(batch["side_stats_games"], 2)
+
+    def test_duplicate_finished_game_does_not_duplicate_side_statistics(self):
+        """同じ対局の完了行が再出力されても先後統計を二重計上しない。"""
+        output = (
+            b"Finished game 1 (A-dev vs B-base): 1-0 {Sente wins}\n"
+            b"Finished game 1 (A-dev vs B-base): 1-0 {Sente wins}\n"
+            b"Finished game 2 (B-base vs A-dev): 0-1 {Gote wins}\n"
+        )
+        config = types.SimpleNamespace(
+            workload={"test": {"book": {"name": "sample-shogi.epd"}}}
+        )
+        result_queue = queue.Queue()
+        process = types.SimpleNamespace(stdout=io.BytesIO(output))
+
+        with patch.object(worker, "Popen", return_value=process):
+            worker.run_and_parse_runner(
+                config,
+                "runner --games 2",
+                0,
+                result_queue,
+                threading.Event(),
+            )
+
+        batch = result_queue.get_nowait()
+        self.assertTrue(result_queue.empty())
+        self.assertEqual(sum(batch["trinomial"]), 2)
+        self.assertEqual(batch["side_stats_games"], 2)
 
     def test_report_results_sums_side_statistics(self):
         """複数 pair の先後別カウンタを整数のまま合算して送る。"""
