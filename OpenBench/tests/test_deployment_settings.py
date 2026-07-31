@@ -1,5 +1,7 @@
 import importlib
 import os
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -28,7 +30,7 @@ class DeploymentSettingsTests(SimpleTestCase):
         self.assertTrue(settings.STATIC_ROOT)
 
     def test_gmail_smtp_is_configured_from_environment(self):
-        """Gmail SMTP は環境変数がそろった場合だけ有効化する。"""
+        """移行中は従来の環境変数をfallbackとして利用できる。"""
         with patch.dict(
             os.environ,
             {
@@ -45,5 +47,29 @@ class DeploymentSettingsTests(SimpleTestCase):
         self.assertEqual(reloaded_settings.EMAIL_HOST_USER, "sender@example.com")
         self.assertEqual(reloaded_settings.EMAIL_HOST_PASSWORD, "app-password")
         self.assertEqual(reloaded_settings.DEFAULT_FROM_EMAIL, "sender@example.com")
+
+        importlib.reload(project_settings)
+
+    def test_gmail_smtp_prefers_systemd_credential(self):
+        """systemd credentialがある場合は環境変数より優先する。"""
+        with tempfile.TemporaryDirectory() as credential_directory:
+            Path(credential_directory, "gmail-app-password").write_text(
+                "file-app-password\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "CREDENTIALS_DIRECTORY": credential_directory,
+                    "GMAIL_USER": "sender@example.com",
+                    "GMAIL_APP_PASSWORD": "environment-app-password",
+                },
+            ):
+                reloaded_settings = importlib.reload(project_settings)
+
+            self.assertEqual(
+                reloaded_settings.EMAIL_HOST_PASSWORD,
+                "file-app-password",
+            )
 
         importlib.reload(project_settings)

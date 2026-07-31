@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/2.0/ref/settings/
 """
 
 import os
+from pathlib import Path
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -145,8 +146,28 @@ CSRF_TRUSTED_ORIGINS = [
     'https://bench.kishibe.dyndns.tv',
 ]
 
+
+def read_systemd_credential(name):
+    credential_directory = os.environ.get('CREDENTIALS_DIRECTORY')
+    if not credential_directory:
+        return None
+
+    try:
+        value = Path(credential_directory, name).read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeError):
+        return None
+
+    if not value or any(character.isspace() for character in value):
+        return None
+
+    return value
+
+
 GMAIL_USER = os.environ.get('GMAIL_USER')
-GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
+GMAIL_APP_PASSWORD = (
+    read_systemd_credential('gmail-app-password')
+    or os.environ.get('GMAIL_APP_PASSWORD')
+)
 
 # Separate file-backed capabilities for the managed autotune client and the
 # read-only controller. Token values are never loaded into source configuration.
