@@ -2,12 +2,17 @@ import json
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from OpenBench.autotune_api import HEARTBEAT_TIMEOUT_SECONDS, MANAGED_CLIENT_ID
+from OpenBench.autotune_api import (
+    HEARTBEAT_TIMEOUT_SECONDS,
+    MANAGED_CLIENT_ID,
+    _is_root_owned_systemd_credential,
+)
 from OpenBench.models import AutotuneClientStatus
 
 
@@ -207,3 +212,15 @@ class AutotuneApiTests(TestCase):
             "/api/autotune/v1/status/other/", **self.auth("loop-capability")
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_only_root_owned_systemd_token_mode_is_accepted(self):
+        credential = Path("/run/credentials/openbench.service/token")
+        root_owned = SimpleNamespace(st_uid=0, st_gid=0)
+        user_owned = SimpleNamespace(st_uid=1000, st_gid=1000)
+
+        self.assertTrue(_is_root_owned_systemd_credential(credential, root_owned, 0o440))
+        self.assertFalse(_is_root_owned_systemd_credential(credential, root_owned, 0o640))
+        self.assertFalse(_is_root_owned_systemd_credential(credential, user_owned, 0o440))
+        self.assertFalse(
+            _is_root_owned_systemd_credential(Path("/tmp/token"), root_owned, 0o440)
+        )

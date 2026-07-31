@@ -32,6 +32,15 @@ class ApiRequestError(ValueError):
         self.status_code = status_code
 
 
+def _is_root_owned_systemd_credential(path: Path, metadata: os.stat_result, mode: int) -> bool:
+    return (
+        path.as_posix().startswith("/run/credentials/")
+        and metadata.st_uid == 0
+        and metadata.st_gid == 0
+        and mode == 0o440
+    )
+
+
 def _error(code: str, status_code: int) -> JsonResponse:
     return JsonResponse(
         {"schema_version": SCHEMA_VERSION, "error": {"code": code}},
@@ -47,8 +56,11 @@ def _token_from_file(setting_name: str) -> str | None:
     try:
         if path.is_symlink() or not path.is_file():
             return None
-        if os.name != "nt" and stat.S_IMODE(path.stat().st_mode) & 0o077:
-            return None
+        if os.name != "nt":
+            metadata = path.stat()
+            mode = stat.S_IMODE(metadata.st_mode)
+            if mode & 0o077 and not _is_root_owned_systemd_credential(path, metadata, mode):
+                return None
         token = path.read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError):
         return None
