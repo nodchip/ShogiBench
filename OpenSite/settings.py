@@ -148,6 +148,11 @@ CSRF_TRUSTED_ORIGINS = [
 GMAIL_USER = os.environ.get('GMAIL_USER')
 GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
 
+# Separate file-backed capabilities for the managed autotune client and the
+# read-only controller. Token values are never loaded into source configuration.
+AUTOTUNE_CLIENT_TOKEN_FILE = os.environ.get('SHOGIBENCH_AUTOTUNE_CLIENT_TOKEN_FILE', '')
+AUTOTUNE_LOOP_TOKEN_FILE = os.environ.get('SHOGIBENCH_AUTOTUNE_LOOP_TOKEN_FILE', '')
+
 if GMAIL_USER and GMAIL_APP_PASSWORD:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
     EMAIL_HOST = 'smtp.gmail.com'

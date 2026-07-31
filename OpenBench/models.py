@@ -62,6 +62,25 @@ class Machine(Model):
     def __str__(self):
         return '[%d] %s' % (self.id, self.user.username)
 
+class AutotuneClientStatus(Model):
+
+    class State(TextChoices):
+        IDLE = 'idle', 'idle'
+        RUNNING = 'running', 'running'
+        ERROR = 'error', 'error'
+
+    client_id          = CharField(max_length=128, unique=True)
+    state              = CharField(max_length=16, choices=State.choices, default=State.IDLE)
+    heartbeat_at       = DateTimeField(blank=True, null=True)
+    current_test_id    = BigIntegerField(blank=True, null=True)
+    origin             = CharField(max_length=64, blank=True, null=True)
+    last_error_code    = CharField(max_length=64, blank=True, default='')
+    last_error_message = CharField(max_length=256, blank=True, default='')
+    updated_at         = DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.client_id
+
 class Result(Model):
 
     test     = ForeignKey('Test', PROTECT, related_name='test')

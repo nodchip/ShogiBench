@@ -18,7 +18,7 @@
 #                                                                             #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-import django.urls, OpenBench.views
+import django.urls, OpenBench.autotune_api, OpenBench.views
 
 urlpatterns = [
 
@@ -88,6 +88,14 @@ urlpatterns = [
     django.urls.path(r'api/books/<str:engine>/<str:identifier>/', OpenBench.views.api_book_download),
     django.urls.path(r'api/buildinfo/', OpenBench.views.api_build_info),
     django.urls.path(r'api/pgns/<int:pgn_id>/', OpenBench.views.api_pgns),
+
+    # Versioned API for the isolated managed autotune client.
+    django.urls.path(r'api/autotune/v1/poll/', OpenBench.autotune_api.poll),
+    django.urls.path(r'api/autotune/v1/heartbeat/', OpenBench.autotune_api.heartbeat),
+    django.urls.path(
+        r'api/autotune/v1/status/<str:client_id>/',
+        OpenBench.autotune_api.status,
+    ),
 
     # Redirect anything else to the Index
     django.urls.path(r'', OpenBench.views.index),
