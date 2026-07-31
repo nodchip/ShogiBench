@@ -2,6 +2,7 @@ import json
 import urllib.error
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import TestCase
 
 from AutotuneClient.client import (
@@ -11,6 +12,7 @@ from AutotuneClient.client import (
     FatalClientError,
     ManagedClient,
     TransientClientError,
+    _is_root_owned_systemd_credential,
     load_config,
     run_forever,
 )
@@ -124,6 +126,18 @@ class AutotuneManagedClientTests(TestCase):
 
             with self.assertRaises(ClientConfigurationError):
                 load_config(config)
+
+    def test_only_root_owned_systemd_credential_mode_is_accepted(self):
+        credential = Path("/run/credentials/example.service/token")
+        root_owned = SimpleNamespace(st_uid=0, st_gid=0)
+        user_owned = SimpleNamespace(st_uid=1000, st_gid=1000)
+
+        self.assertTrue(_is_root_owned_systemd_credential(credential, root_owned, 0o440))
+        self.assertFalse(_is_root_owned_systemd_credential(credential, root_owned, 0o640))
+        self.assertFalse(_is_root_owned_systemd_credential(credential, user_owned, 0o440))
+        self.assertFalse(
+            _is_root_owned_systemd_credential(Path("/tmp/token"), root_owned, 0o440)
+        )
 
     def test_api_auth_failure_is_fatal_without_secret_in_message(self):
         with TemporaryDirectory() as temporary:

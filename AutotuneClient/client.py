@@ -59,6 +59,15 @@ def _validate_server_url(value: str) -> str:
     raise ClientConfigurationError("server_url must use HTTPS, except for a loopback endpoint")
 
 
+def _is_root_owned_systemd_credential(path: Path, metadata: os.stat_result, mode: int) -> bool:
+    return (
+        path.as_posix().startswith("/run/credentials/")
+        and metadata.st_uid == 0
+        and metadata.st_gid == 0
+        and mode == 0o440
+    )
+
+
 def _validate_secret_file(path: Path) -> Path:
     value = path.resolve(strict=True)
     candidate = path.absolute()
@@ -68,8 +77,14 @@ def _validate_secret_file(path: Path) -> Path:
         candidate = candidate.parent
     if not value.is_file():
         raise ClientConfigurationError("credential_file must be a regular non-symlink file")
-    if os.name != "nt" and stat.S_IMODE(value.stat().st_mode) & 0o077:
-        raise ClientConfigurationError("credential_file must not be accessible by group or others")
+    if os.name != "nt":
+        metadata = value.stat()
+        mode = stat.S_IMODE(metadata.st_mode)
+        systemd_credential = _is_root_owned_systemd_credential(value, metadata, mode)
+        if mode & 0o077 and not systemd_credential:
+            raise ClientConfigurationError(
+                "credential_file must be owner-only or a root-owned systemd credential"
+            )
     return value
 
 
