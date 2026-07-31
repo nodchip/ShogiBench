@@ -164,10 +164,10 @@ def read_systemd_credential(name):
 
 
 GMAIL_USER = os.environ.get('GMAIL_USER')
-GMAIL_APP_PASSWORD = (
-    read_systemd_credential('gmail-app-password')
-    or os.environ.get('GMAIL_APP_PASSWORD')
-)
+GMAIL_APP_PASSWORD = read_systemd_credential('gmail-app-password')
+
+if GMAIL_USER and not GMAIL_APP_PASSWORD:
+    raise RuntimeError('Gmail credential is unavailable')
 
 # Separate file-backed capabilities for the managed autotune client and the
 # read-only controller. Token values are never loaded into source configuration.

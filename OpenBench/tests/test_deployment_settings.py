@@ -29,24 +29,18 @@ class DeploymentSettingsTests(SimpleTestCase):
         """collectstatic の出力先が設定されている。"""
         self.assertTrue(settings.STATIC_ROOT)
 
-    def test_gmail_smtp_is_configured_from_environment(self):
-        """移行中は従来の環境変数をfallbackとして利用できる。"""
+    def test_gmail_password_environment_is_rejected(self):
+        """旧password環境変数へfallbackせずfail closedにする。"""
         with patch.dict(
             os.environ,
             {
+                "CREDENTIALS_DIRECTORY": "",
                 "GMAIL_USER": "sender@example.com",
-                "GMAIL_APP_PASSWORD": "app-password",
+                "GMAIL_APP_PASSWORD": "environment-app-password",
             },
         ):
-            reloaded_settings = importlib.reload(project_settings)
-
-        self.assertEqual(reloaded_settings.EMAIL_BACKEND, "django.core.mail.backends.smtp.EmailBackend")
-        self.assertEqual(reloaded_settings.EMAIL_HOST, "smtp.gmail.com")
-        self.assertEqual(reloaded_settings.EMAIL_PORT, 587)
-        self.assertTrue(reloaded_settings.EMAIL_USE_TLS)
-        self.assertEqual(reloaded_settings.EMAIL_HOST_USER, "sender@example.com")
-        self.assertEqual(reloaded_settings.EMAIL_HOST_PASSWORD, "app-password")
-        self.assertEqual(reloaded_settings.DEFAULT_FROM_EMAIL, "sender@example.com")
+            with self.assertRaisesRegex(RuntimeError, "Gmail credential is unavailable"):
+                importlib.reload(project_settings)
 
         importlib.reload(project_settings)
 
@@ -71,5 +65,10 @@ class DeploymentSettingsTests(SimpleTestCase):
                 reloaded_settings.EMAIL_HOST_PASSWORD,
                 "file-app-password",
             )
+            self.assertEqual(reloaded_settings.EMAIL_HOST, "smtp.gmail.com")
+            self.assertEqual(reloaded_settings.EMAIL_PORT, 587)
+            self.assertTrue(reloaded_settings.EMAIL_USE_TLS)
+            self.assertEqual(reloaded_settings.EMAIL_HOST_USER, "sender@example.com")
+            self.assertEqual(reloaded_settings.DEFAULT_FROM_EMAIL, "sender@example.com")
 
         importlib.reload(project_settings)
