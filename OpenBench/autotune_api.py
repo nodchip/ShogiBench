@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, identify_hasher
 from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from OpenBench.models import AutotuneClientStatus
+from OpenBench.models import AutotuneClientStatus, AutotuneUploadCapability
 
 SCHEMA_VERSION = 1
 MANAGED_CLIENT_ID = "autotune-rating-primary"
@@ -69,6 +70,36 @@ def _token_from_file(setting_name: str) -> str | None:
     return token
 
 
+def _configured_upload_capability(
+    client_token: str | None = None,
+    loop_token: str | None = None,
+) -> tuple[AutotuneUploadCapability, str, str]:
+    if client_token is None:
+        client_token = _token_from_file("AUTOTUNE_CLIENT_TOKEN_FILE")
+    if loop_token is None:
+        loop_token = _token_from_file("AUTOTUNE_LOOP_TOKEN_FILE")
+    capabilities = list(AutotuneUploadCapability.objects.filter(enabled=True)[:2])
+    try:
+        hasher = identify_hasher(capabilities[0].verifier) if len(capabilities) == 1 else None
+    except ValueError:
+        hasher = None
+    if (
+        client_token is None
+        or loop_token is None
+        or hmac.compare_digest(client_token, loop_token)
+        or len(capabilities) != 1
+        or capabilities[0].scope != "network_upload"
+        or capabilities[0].engine != "tanuki-"
+        or hasher is None
+        or hasher.algorithm != "pbkdf2_sha256"
+        or hasher.iterations != 600000
+        or check_password(client_token, capabilities[0].verifier)
+        or check_password(loop_token, capabilities[0].verifier)
+    ):
+        raise ApiRequestError("service_unavailable", 503)
+    return capabilities[0], client_token, loop_token
+
+
 def _authorize(request: HttpRequest, setting_name: str) -> None:
     expected = _token_from_file(setting_name)
     other_setting = (
@@ -77,10 +108,9 @@ def _authorize(request: HttpRequest, setting_name: str) -> None:
         else "AUTOTUNE_CLIENT_TOKEN_FILE"
     )
     other = _token_from_file(other_setting)
+    _configured_upload_capability(expected, other)
     supplied = request.headers.get("Authorization", "")
     prefix = "Bearer "
-    if expected is None or other is None or hmac.compare_digest(expected, other):
-        raise ApiRequestError("service_unavailable", 503)
     if not supplied.startswith(prefix) or not hmac.compare_digest(supplied[len(prefix) :], expected):
         raise ApiRequestError("forbidden", 403)
 

@@ -18,7 +18,7 @@
 #                                                                             #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-import django.urls, OpenBench.autotune_api, OpenBench.views
+import django.urls, OpenBench.autotune_api, OpenBench.autotune_upload_api, OpenBench.views
 
 urlpatterns = [
 
@@ -95,6 +95,14 @@ urlpatterns = [
     django.urls.path(
         r'api/autotune/v1/status/<str:client_id>/',
         OpenBench.autotune_api.status,
+    ),
+    django.urls.path(
+        r'api/autotune/v1/networks/',
+        OpenBench.autotune_upload_api.upload_network,
+    ),
+    django.urls.path(
+        r'api/autotune/v1/networks/receipts/<str:idempotency_key>/',
+        OpenBench.autotune_upload_api.registration_receipt,
     ),
 
     # Redirect anything else to the Index

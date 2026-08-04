@@ -272,6 +272,32 @@ class Network(Model):
     def __str__(self):
         return '[{}] {} ({})'.format(self.engine, self.name, self.sha256)
 
+class AutotuneUploadCapability(Model):
+
+    token_id   = CharField(max_length=64, unique=True)
+    verifier   = CharField(max_length=256)
+    enabled    = BooleanField(default=True)
+    scope      = CharField(max_length=64, default='network_upload')
+    engine     = CharField(max_length=64, default='tanuki-')
+    created_at = DateTimeField(auto_now_add=True)
+    rotated_at = DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.token_id
+
+class AutotuneNetworkRegistration(Model):
+
+    network         = OneToOneField(Network, PROTECT, related_name='autotune_registration')
+    full_sha256     = CharField(max_length=64, unique=True)
+    byte_size       = BigIntegerField()
+    origin          = CharField(max_length=64, default='autotune_acceptance')
+    idempotency_key = CharField(max_length=64, unique=True)
+    token_id        = CharField(max_length=64)
+    created_at      = DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.idempotency_key
+
 class Book(Model):
 
     sha256   = CharField(max_length=8)

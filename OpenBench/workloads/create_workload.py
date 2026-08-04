@@ -61,7 +61,7 @@ def create_workload(request, workload_type):
     if request.method == 'GET':
 
         data = {
-            'networks' : list(Network.objects.all().values()),
+            'networks' : list(Network.objects.filter(autotune_registration__isnull=True).values()),
             'books'    : list(Book.objects.all().values()),
         }
 

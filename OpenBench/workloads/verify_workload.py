@@ -272,7 +272,12 @@ def verify_github_repo(errors, request, field):
 def verify_network(errors, request, field, field_name, engine_field):
     try:
         if request.POST[field] == '': return
-        Network.objects.get(engine=request.POST[engine_field], sha256=request.POST[field])
+        network = Network.objects.get(
+            engine=request.POST[engine_field],
+            sha256=request.POST[field],
+        )
+        if hasattr(network, 'autotune_registration'):
+            raise ValueError('Acceptance network is not rating eligible')
     except: errors.append('Unknown Network Provided for {0}'.format(field_name))
 
 def verify_book(errors, request, field, field_name, engine_field):

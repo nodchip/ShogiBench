@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.contrib.auth.hashers import make_password
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -13,7 +14,7 @@ from OpenBench.autotune_api import (
     MANAGED_CLIENT_ID,
     _is_root_owned_systemd_credential,
 )
-from OpenBench.models import AutotuneClientStatus
+from OpenBench.models import AutotuneClientStatus, AutotuneUploadCapability
 
 
 class AutotuneApiTests(TestCase):
@@ -31,6 +32,10 @@ class AutotuneApiTests(TestCase):
             AUTOTUNE_LOOP_TOKEN_FILE=str(self.loop_token),
         )
         self.settings.enable()
+        self.upload_capability = AutotuneUploadCapability.objects.create(
+            token_id="upload-v1",
+            verifier=make_password("upload-capability"),
+        )
 
     def tearDown(self):
         self.settings.disable()
@@ -205,6 +210,29 @@ class AutotuneApiTests(TestCase):
     def test_identical_capabilities_fail_closed(self):
         self.loop_token.write_text("client-capability\n", encoding="utf-8")
         response = self.post_json("/api/autotune/v1/poll/", self.poll_payload())
+        self.assertEqual(response.status_code, 503)
+
+    def test_missing_upload_capability_fails_all_capabilities_closed(self):
+        self.upload_capability.delete()
+
+        response = self.post_json("/api/autotune/v1/poll/", self.poll_payload())
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_upload_secret_matching_existing_capability_fails_closed(self):
+        self.upload_capability.verifier = make_password("client-capability")
+        self.upload_capability.save()
+
+        response = self.post_json("/api/autotune/v1/poll/", self.poll_payload())
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_malformed_upload_verifier_fails_closed(self):
+        self.upload_capability.verifier = "not-a-password-verifier"
+        self.upload_capability.save()
+
+        response = self.post_json("/api/autotune/v1/poll/", self.poll_payload())
+
         self.assertEqual(response.status_code, 503)
 
     def test_unknown_status_client_is_rejected(self):
