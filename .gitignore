@@ -20,6 +20,7 @@ Media/Networks/*
 Media/Events/*
 
 *.lock
+!requirements-windows.lock
 *.epd
 .worktrees/
 .venv/
