@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -10,7 +11,14 @@ class SourcePinTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[2]
         config = json.loads((root / "Config" / "config.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(config["client_version"], 41)
+        worker_source = (root / "Client" / "worker.py").read_text(encoding="utf-8")
+        worker_version = re.search(
+            r"^CLIENT_VERSION\s*=\s*(\d+)", worker_source, flags=re.MULTILINE,
+        )
+
+        self.assertIsNotNone(worker_version)
+        self.assertEqual(config["client_version"], int(worker_version.group(1)))
+        self.assertEqual(config["client_version"], 40)
         self.assertEqual(
             config["client_repo_ref"],
             "113b0db7d66ea408ebc3247f71a126539ab5f602",
