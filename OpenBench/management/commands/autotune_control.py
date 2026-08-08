@@ -158,6 +158,9 @@ class Command(BaseCommand):
         policy = self._policy(request['stage'], request['policy'])
         dev, dev_engine, dev_network, dev_book = self._side(request['dev'])
         base, base_engine, base_network, base_book = self._side(request['base'])
+        acceptance_pair = request['stage'] == 'acceptance'
+        if acceptance_pair and policy['workload_size'] != 1:
+            raise ControlError('configured_policy_invalid')
 
         test = Test.objects.create(
             author=actor.user.username,
@@ -185,7 +188,8 @@ class Command(BaseCommand):
             workload_size=policy['workload_size'],
             priority=policy['priority'],
             throughput=policy['throughput'],
-            test_mode='SPRT',
+            test_mode='GAMES' if acceptance_pair else 'SPRT',
+            max_games=2 if acceptance_pair else 0,
             elolower=policy['elo_lower'],
             eloupper=policy['elo_upper'],
             alpha=policy['alpha'],

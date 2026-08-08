@@ -21,7 +21,7 @@ POLICY = {
     'priority': 0,
     'throughput': 1,
     'upload_pgns': True,
-    'workload_size': 2,
+    'workload_size': 1,
 }
 
 
@@ -80,6 +80,9 @@ class AutotuneControlTests(TestCase):
         self.assertEqual(test.author, 'autotune')
         self.assertEqual(test.rule_profile, self.rule)
         self.assertTrue(test.approved)
+        self.assertEqual(test.test_mode, 'GAMES')
+        self.assertEqual(test.max_games, 2)
+        self.assertEqual(test.workload_size, 1)
 
         observed = self._request('get', {'test_id': test.id})
         self.assertEqual(observed['status'], 'observed')
