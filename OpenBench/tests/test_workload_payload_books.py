@@ -2,7 +2,8 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
 from OpenBench.config import OPENBENCH_CONFIG
-from OpenBench.models import Book, Engine, Machine, Profile, Result, Test
+from OpenBench.models import Book, Engine, Machine, Profile, Result, RuleProfile, Test
+from OpenBench.rule_profiles import canonical_profile_fields
 from OpenBench.workloads.get_workload import workload_to_dictionary
 
 
@@ -28,10 +29,12 @@ class WorkloadPayloadBookTests(TestCase):
         Book.objects.create(sha256="12345678", name="base-book.db", engine="tanuki-", author="tester")
 
         opening_book = next(iter(OPENBENCH_CONFIG["books"].keys()))
+        rule_profile = RuleProfile.objects.create(**canonical_profile_fields())
         test = Test.objects.create(
             author="tester",
             book_name=opening_book,
             upload_pgns="FALSE",
+            rule_profile=rule_profile,
             dev=dev,
             dev_repo="https://github.com/example/dev",
             dev_engine="tanuki-",
@@ -76,3 +79,11 @@ class WorkloadPayloadBookTests(TestCase):
         self.assertEqual(workload["test"]["dev"]["book_name"], "dev-book.db")
         self.assertEqual(workload["test"]["base"]["book"], "12345678")
         self.assertEqual(workload["test"]["base"]["book_name"], "base-book.db")
+        self.assertEqual(
+            workload["test"]["rule_profile_id"],
+            "canonical-yaneuraou-csarule24-v1",
+        )
+        self.assertEqual(
+            workload["test"]["rule_profile_semantics_sha256"],
+            "be4a1cff6b5bf416f89f9ed17bc70676f9272bf32fd27dd373b8fb4d8d997a93",
+        )

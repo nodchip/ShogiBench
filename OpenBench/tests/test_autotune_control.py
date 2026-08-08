@@ -1,5 +1,4 @@
 import io
-import hashlib
 import json
 from unittest.mock import patch
 
@@ -9,6 +8,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from OpenBench.models import Book, Engine, Network, Profile, RuleProfile, Test
+from OpenBench.rule_profiles import canonical_profile_fields
 
 
 POLICY = {
@@ -35,18 +35,7 @@ class AutotuneControlTests(TestCase):
         Profile.objects.create(user=user, enabled=False, approver=False, repos={})
         self.other_user = User.objects.create_user(username='other')
         Profile.objects.create(user=self.other_user, enabled=True, approver=True, repos={})
-        semantics = {'declaration_points': 31}
-        digest = hashlib.sha256(json.dumps(
-            semantics, sort_keys=True, separators=(',', ':'),
-        ).encode()).hexdigest()
-        self.rule = RuleProfile.objects.create(
-            profile_id='canonical-yaneuraou-csarule24-v1',
-            authority_kind='canonical-yaneuraou-source',
-            source_repository='https://github.com/yaneurao/YaneuraOu',
-            source_revision='33ccf1f907eb7184889fa23051243f81ab0bf973',
-            semantics_sha256=digest,
-            semantics=semantics,
-        )
+        self.rule = RuleProfile.objects.create(**canonical_profile_fields())
         self.engine = Engine.objects.create(
             name='public-engine', source='https://example.invalid/source', sha='b' * 64, bench=1,
         )

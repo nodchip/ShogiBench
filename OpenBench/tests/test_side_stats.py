@@ -2,7 +2,8 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
 from OpenBench import side_stats
-from OpenBench.models import Engine, Machine, Profile, Result, Test
+from OpenBench.models import Engine, Machine, Profile, Result, RuleProfile, Test
+from OpenBench.rule_profiles import canonical_profile_fields
 from OpenBench.templatetags.mytags import longStatBlock, shortStatBlock
 from OpenBench.utils import update_test
 
@@ -77,7 +78,7 @@ class SideStatsIngestionTests(TestCase):
         )
         return payload
 
-    def post_update(self, side_payload=None, trinomial="0 0 2"):
+    def post_update(self, side_payload=None, trinomial="0 0 2", profile=None):
         """指定した先後別統計を既存の結果報告に付加して送る。"""
         payload = {
             "crashes": "0",
@@ -89,6 +90,11 @@ class SideStatsIngestionTests(TestCase):
             "trinomial": trinomial,
             "pentanomial": "0 0 0 0 1",
         }
+        if profile is not None:
+            payload.update(
+                rule_profile_id=profile.profile_id,
+                rule_profile_semantics_sha256=profile.semantics_sha256,
+            )
         if side_payload is not None:
             payload.update(side_payload)
         request = self.factory.post("/clientSubmitResults/", payload)
@@ -175,6 +181,20 @@ class SideStatsIngestionTests(TestCase):
 
         self.assertIn("error", response)
         self.assert_database_unchanged()
+
+    def test_rejects_rule_profile_mismatch_without_updates(self):
+        """canonical test は profile ID 不一致を集計前に拒否する。"""
+        rule_profile = RuleProfile.objects.create(**canonical_profile_fields())
+        self.test.rule_profile = rule_profile
+        self.test.save(update_fields=("rule_profile",))
+
+        response = self.post_update(self.valid_side_payload())
+
+        self.assertEqual(response, {"error": "Rule profile mismatch"})
+        self.assert_database_unchanged()
+
+        response = self.post_update(self.valid_side_payload(), profile=rule_profile)
+        self.assertEqual(response, {})
 
 
 class SideStatsFormattingTests(TestCase):

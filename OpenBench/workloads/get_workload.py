@@ -197,6 +197,9 @@ def workload_to_dictionary(test, result, machine):
     workload['test'] = {
         'id'            : test.id,
         'rule_profile_id': test.rule_profile_id,
+        'rule_profile_semantics_sha256': (
+            test.rule_profile.semantics_sha256 if test.rule_profile_id else None
+        ),
         'type'          : test.test_mode,
         'syzygy_wdl'    : test.syzygy_wdl,
         'syzygy_adj'    : test.syzygy_adj,

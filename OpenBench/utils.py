@@ -556,6 +556,17 @@ def update_test(request, machine):
 
         test = Test.objects.select_for_update().get(id=test_id)
 
+        supplied_rule_profile = request.POST.get('rule_profile_id')
+        supplied_semantics_sha256 = request.POST.get('rule_profile_semantics_sha256')
+        if test.rule_profile_id:
+            if (
+                supplied_rule_profile != test.rule_profile_id
+                or supplied_semantics_sha256 != test.rule_profile.semantics_sha256
+            ):
+                return { 'error' : 'Rule profile mismatch' }
+        elif supplied_rule_profile or supplied_semantics_sha256:
+            return { 'error' : 'Rule profile mismatch' }
+
         if test.finished or test.deleted:
             return { 'stop' : True }
 

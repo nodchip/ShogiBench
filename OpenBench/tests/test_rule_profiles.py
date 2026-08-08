@@ -1,27 +1,14 @@
-import hashlib
-import json
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from OpenBench.models import RuleProfile
+from OpenBench.rule_profiles import canonical_profile_fields
 
 
 class RuleProfileTests(TestCase):
 
     def _profile(self):
-        semantics = {'declaration_points': 31}
-        digest = hashlib.sha256(json.dumps(
-            semantics, sort_keys=True, separators=(',', ':'),
-        ).encode()).hexdigest()
-        return RuleProfile.objects.create(
-            profile_id='canonical-yaneuraou-csarule24-v1',
-            authority_kind='canonical-yaneuraou-source',
-            source_repository='https://github.com/yaneurao/YaneuraOu',
-            source_revision='33ccf1f907eb7184889fa23051243f81ab0bf973',
-            semantics_sha256=digest,
-            semantics=semantics,
-        )
+        return RuleProfile.objects.create(**canonical_profile_fields())
 
     def test_profile_is_immutable(self):
         profile = self._profile()
@@ -39,11 +26,15 @@ class RuleProfileTests(TestCase):
 
     def test_semantics_hash_must_match(self):
         with self.assertRaisesMessage(ValidationError, 'semantics hash does not match'):
+            fields = canonical_profile_fields()
+            fields['semantics_sha256'] = 'a' * 64
             RuleProfile.objects.create(
-                profile_id='canonical-yaneuraou-csarule24-v1',
-                authority_kind='canonical-yaneuraou-source',
-                source_repository='https://github.com/yaneurao/YaneuraOu',
-                source_revision='33ccf1f907eb7184889fa23051243f81ab0bf973',
-                semantics_sha256='a' * 64,
-                semantics={'declaration_points': 31},
+                **fields,
             )
+
+    def test_canonical_profile_must_match_exact_authority(self):
+        fields = canonical_profile_fields()
+        fields['source_repository'] = fields['source_repository'].removesuffix('.git')
+
+        with self.assertRaisesMessage(ValidationError, 'does not match authority'):
+            RuleProfile.objects.create(**fields)

@@ -828,6 +828,12 @@ def client_heartbeat(request, machine):
 
     # Include a 'stop' header iff the test was finished
     test = Test.objects.get(id=int(request.POST['test_id']))
+    if test.rule_profile_id:
+        if (
+            request.POST.get('rule_profile_id') != test.rule_profile_id
+            or request.POST.get('rule_profile_semantics_sha256') != test.rule_profile.semantics_sha256
+        ):
+            return JsonResponse({ 'error' : 'Rule profile mismatch' })
     return JsonResponse([{}, { 'stop' : True }][test.finished])
 
 @csrf_exempt
@@ -835,6 +841,14 @@ def client_heartbeat(request, machine):
 def client_submit_pgn(request, machine):
 
     with transaction.atomic():
+
+        test = Test.objects.select_for_update().get(id=int(request.POST['test_id']))
+        if test.rule_profile_id:
+            if (
+                request.POST.get('rule_profile_id') != test.rule_profile_id
+                or request.POST.get('rule_profile_semantics_sha256') != test.rule_profile.semantics_sha256
+            ):
+                return JsonResponse({ 'error' : 'Rule profile mismatch' })
 
         # Format: test.result.book-index.pgn.bz2
         pgn            = PGN()

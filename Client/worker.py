@@ -237,6 +237,16 @@ class Configuration:
 
 class ServerReporter:
 
+    @staticmethod
+    def rule_profile_payload(config):
+        test = config.workload['test']
+        if test.get('rule_profile_id') is None:
+            return {}
+        return {
+            'rule_profile_id': test['rule_profile_id'],
+            'rule_profile_semantics_sha256': test['rule_profile_semantics_sha256'],
+        }
+
     ## Handles reporting things to the server, which are not intended to send a great
     ## deal of information back. Reports to the server can hit various endpoints, with
     ## differing payloads. Payloads must always include the machine id, and secret token
@@ -329,7 +339,6 @@ class ServerReporter:
 
             'test_id'      : config.workload['test']['id'],
             'result_id'    : config.workload['result']['id'],
-
             'trinomial'    : [0, 0, 0],       # LDW
             'pentanomial'  : [0, 0, 0, 0, 0], # LL DL DD DW WW
 
@@ -337,6 +346,7 @@ class ServerReporter:
             'timelosses'   : 0, # " loses on time "
             'illegals'     : 0, # " illegal move "
         }
+        payload.update(ServerReporter.rule_profile_payload(config))
 
         for batch in batches:
 
@@ -373,8 +383,9 @@ class ServerReporter:
     def report_heartbeat(config):
 
         payload = {
-            'test_id' : config.workload['test']['id']
+            'test_id' : config.workload['test']['id'],
         }
+        payload.update(ServerReporter.rule_profile_payload(config))
 
         return ServerReporter.report(config, 'clientHeartbeat', payload)
 
@@ -387,6 +398,7 @@ class ServerReporter:
             'book_index'   : config.workload['test']['book_index'],
             'Content-Type' : 'application/octet-stream',
         }
+        payload.update(ServerReporter.rule_profile_payload(config))
 
         files = {
             'file' : ('games.pgn', compressed_pgn_text)
@@ -395,6 +407,11 @@ class ServerReporter:
         return ServerReporter.report(config, 'clientSubmitPGN', payload, files)
 
 class MatchRunner:
+
+    CANONICAL_RULE_PROFILE = 'canonical-yaneuraou-csarule24-v1'
+    CANONICAL_RULE_PROFILE_SEMANTICS_SHA256 = (
+        'be4a1cff6b5bf416f89f9ed17bc70676f9272bf32fd27dd373b8fb4d8d997a93'
+    )
 
     ## Handles building the very long string of arguments that need to be passed
     ## to match runner in order to launch a set of games. Operates on the Configuration,
@@ -426,6 +443,19 @@ class MatchRunner:
 
         # Always include -recover, -variant, and -testEnv
         return ['-repeat', ''][no_reverse] + ' -recover -variant %s -testEnv' % (variant)
+
+    @staticmethod
+    def rule_profile_settings(config):
+        if not MatchRunner.is_shogi(config):
+            return ''
+        profile_id = config.workload['test'].get('rule_profile_id')
+        semantics_sha256 = config.workload['test'].get('rule_profile_semantics_sha256')
+        if (
+            profile_id != MatchRunner.CANONICAL_RULE_PROFILE
+            or semantics_sha256 != MatchRunner.CANONICAL_RULE_PROFILE_SEMANTICS_SHA256
+        ):
+            raise utils.OpenBenchFatalWorkerException('Unsupported or missing rule profile')
+        return '-ruleprofile %s' % (profile_id)
 
     @staticmethod
     def concurrency_settings(config):
@@ -1352,6 +1382,7 @@ def safe_run_benchmarks(config, branch, engine, network):
 def build_runner_command(config, dev_cmd, base_cmd, scale_factor, timestamp, runner_idx):
 
     flags  = ' ' + MatchRunner.basic_settings(config)
+    flags += ' ' + MatchRunner.rule_profile_settings(config)
     flags += ' ' + MatchRunner.concurrency_settings(config)
     flags += ' ' + MatchRunner.adjudication_settings(config)
     flags += ' ' + MatchRunner.engine_settings(config, dev_cmd, 'dev', scale_factor, runner_idx)

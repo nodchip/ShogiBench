@@ -12,6 +12,31 @@ import worker
 
 
 class WorkerBookTests(unittest.TestCase):
+
+    def test_shogi_runner_requires_and_forwards_canonical_rule_profile(self):
+        config = types.SimpleNamespace(
+            workload={
+                "test": {
+                    "book": {"name": "SHOGI.startpos.sfen.epd"},
+                    "rule_profile_id": "canonical-yaneuraou-csarule24-v1",
+                    "rule_profile_semantics_sha256": (
+                        "be4a1cff6b5bf416f89f9ed17bc70676f9272bf32fd27dd373b8fb4d8d997a93"
+                    ),
+                }
+            }
+        )
+
+        self.assertEqual(
+            worker.MatchRunner.rule_profile_settings(config),
+            "-ruleprofile canonical-yaneuraou-csarule24-v1",
+        )
+        config.workload["test"]["rule_profile_id"] = "legacy-csarule27-unverified-v1"
+        with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+            worker.MatchRunner.rule_profile_settings(config)
+        config.workload["test"]["rule_profile_id"] = "canonical-yaneuraou-csarule24-v1"
+        config.workload["test"]["rule_profile_semantics_sha256"] = "0" * 64
+        with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+            worker.MatchRunner.rule_profile_settings(config)
     def make_benchmark_config(self):
         return types.SimpleNamespace(
             threads=64,
