@@ -135,42 +135,8 @@ class WorkerBookTests(unittest.TestCase):
             False,
             64,
             1,
+            123,
         ))
-        self.assertEqual(
-            run_benchmark.call_args_list[1].kwargs,
-            {"enforce_node_consistency": False},
-        )
-
-    def test_full_capacity_benchmark_allows_divergent_nodes_after_serial_validation(self):
-        with patch.object(
-            worker.bench,
-            "multi_core_bench",
-            return_value=[(472847, 1000), (472848, 900)],
-        ):
-            with self.assertRaises(worker.utils.OpenBenchBadBenchException):
-                worker.bench.run_benchmark(
-                    "engine.exe", None, False, 2, 1, 472847,
-                )
-
-            speed, nodes = worker.bench.run_benchmark(
-                "engine.exe", None, False, 2, 1,
-                enforce_node_consistency=False,
-            )
-
-        self.assertEqual(speed, 950)
-        self.assertEqual(nodes, 472847)
-
-    def test_full_capacity_benchmark_still_rejects_missing_output(self):
-        with patch.object(
-            worker.bench,
-            "multi_core_bench",
-            return_value=[(None, 1000), (472847, 900)],
-        ):
-            with self.assertRaises(worker.utils.OpenBenchBadBenchException):
-                worker.bench.run_benchmark(
-                    "engine.exe", None, False, 2, 1,
-                    enforce_node_consistency=False,
-                )
 
     def test_safe_run_benchmarks_retries_timeout_once_with_warmup(self):
         config = self.make_benchmark_config()
@@ -200,12 +166,12 @@ class WorkerBookTests(unittest.TestCase):
             "[engine.exe] Wrong Bench: 456"
         )
 
-        with patch.object(worker.bench, "run_benchmark", side_effect=[wrong_bench]) as run_benchmark:
+        with patch.object(worker.bench, "run_benchmark", side_effect=[(100, 123), wrong_bench]) as run_benchmark:
             with patch.object(worker.ServerReporter, "report_bad_bench") as report_bad_bench:
                 with self.assertRaises(worker.utils.OpenBenchBadBenchException):
                     worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
 
-        self.assertEqual(run_benchmark.call_count, 1)
+        self.assertEqual(run_benchmark.call_count, 2)
         report_bad_bench.assert_called_once_with(config, "[engine.exe] Wrong Bench: 456")
 
 
