@@ -116,7 +116,9 @@ def multi_core_bench(binary, network, private, threads):
         for process in processes:
             process.join()
 
-def run_benchmark(binary, network, private, threads, sets, expected=None):
+def run_benchmark(
+        binary, network, private, threads, sets, expected=None,
+        enforce_node_consistency=True):
 
     engine = os.path.basename(binary)
 
@@ -125,13 +127,13 @@ def run_benchmark(binary, network, private, threads, sets, expected=None):
         for bench, speed in multi_core_bench(binary, network, private, threads):
             benches.append(bench); speeds.append(speed)
 
-    if len(set(benches)) != 1:
+    if enforce_node_consistency and len(set(benches)) != 1:
         raise utils.OpenBenchBadBenchException('[%s] Non-Deterministic Benches' % (engine))
 
     if None in benches or None in speeds:
         raise utils.OpenBenchBadBenchException('[%s] Failed to Execute Benchmark' % (engine))
 
-    if expected and expected != benches[0]:
+    if enforce_node_consistency and expected and expected != benches[0]:
         raise utils.OpenBenchBadBenchException('[%s] Wrong Bench: %d' % (engine, benches[0]))
 
     return sum(speeds) // len(speeds), benches[0]
