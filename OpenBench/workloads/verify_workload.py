@@ -43,6 +43,7 @@ import traceback
 
 import OpenBench.config
 import OpenBench.utils
+from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonical_rule
 
 from OpenBench.models import *
 
@@ -80,6 +81,7 @@ def verify_test_creation(errors, request):
         (verify_book           , 'dev_book', 'Dev Book', 'dev_engine'),
         (verify_options        , 'dev_options', 'Threads', 'Dev Options'),
         (verify_options        , 'dev_options', 'Hash', 'Dev Options'),
+        (verify_canonical_rule , 'dev_options', 'Dev Options'),
         (verify_time_control   , 'dev_time_control', 'Dev Time Control'),
 
         # Verify everything about the Base Engine
@@ -89,6 +91,7 @@ def verify_test_creation(errors, request):
         (verify_book           , 'base_book', 'Base Book', 'base_engine'),
         (verify_options        , 'base_options', 'Threads', 'Base Options'),
         (verify_options        , 'base_options', 'Hash', 'Base Options'),
+        (verify_canonical_rule , 'base_options', 'Base Options'),
         (verify_time_control   , 'base_time_control', 'Base Time Control'),
 
         # Verify everything about the Test Settings
@@ -121,6 +124,13 @@ def verify_test_creation(errors, request):
 
     for verification in verifications:
         verification[0](errors, request, *verification[1:])
+
+
+def verify_canonical_rule(errors, request, field, field_name):
+    if not RuleProfile.objects.filter(pk=CANONICAL_PROFILE_ID).exists():
+        errors.append('Canonical rule profile is not configured')
+    if not options_select_canonical_rule(request.POST.get(field, '')):
+        errors.append('%s must select exactly one EnteringKingRule=CSARule24' % field_name)
 
 def verify_tune_creation(errors, request):
 

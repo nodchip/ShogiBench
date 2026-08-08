@@ -36,6 +36,7 @@ import OpenBench.views
 
 from OpenBench.models import *
 from OpenBench.config import OPENBENCH_CONFIG
+from OpenBench.rule_profiles import CANONICAL_PROFILE_ID
 from OpenBench.workloads.verify_workload import verify_workload
 
 
@@ -126,6 +127,7 @@ def create_new_test(request):
 
     test                   = Test()
     test.author            = request.user.username
+    test.rule_profile      = RuleProfile.objects.get(pk=CANONICAL_PROFILE_ID)
     test.book_name         = request.POST['book_name']
     test.upload_pgns       = request.POST['upload_pgns']
 

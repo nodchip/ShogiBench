@@ -4,9 +4,10 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
 from OpenBench.config import OPENBENCH_CONFIG
-from OpenBench.models import Book, Engine, Profile, Test
+from OpenBench.models import Book, Engine, Profile, RuleProfile, Test
+from OpenBench.rule_profiles import canonical_profile_fields
 from OpenBench.workloads.create_workload import create_new_test
-from OpenBench.workloads.verify_workload import verify_test_creation
+from OpenBench.workloads.verify_workload import verify_canonical_rule, verify_test_creation
 
 
 class WorkloadBookFormTests(TestCase):
@@ -32,6 +33,7 @@ class WorkloadBookValidationTests(TestCase):
         self.factory = RequestFactory()
         Book.objects.create(sha256="ABCDEF12", name="dev-book.db", engine="tanuki-", author="tester")
         self.opening_book = next(iter(OPENBENCH_CONFIG["books"].keys()))
+        RuleProfile.objects.create(**canonical_profile_fields())
 
     def test_verify_test_creation_rejects_unknown_dev_book(self):
         request = self.factory.post(
@@ -40,13 +42,13 @@ class WorkloadBookValidationTests(TestCase):
                 "dev_engine": "tanuki-",
                 "dev_repo": "https://github.com/example/dev",
                 "dev_network": "",
-                "dev_options": "Threads=1 Hash=16",
+                "dev_options": "Threads=1 Hash=16 option.EnteringKingRule=CSARule24",
                 "dev_time_control": "8.0+0.08",
                 "dev_book": "DEADBEEF",
                 "base_engine": "tanuki-",
                 "base_repo": "https://github.com/example/base",
                 "base_network": "",
-                "base_options": "Threads=1 Hash=16",
+                "base_options": "Threads=1 Hash=16 option.EnteringKingRule=CSARule24",
                 "base_time_control": "8.0+0.08",
                 "base_book": "",
                 "book_name": self.opening_book,
@@ -72,6 +74,22 @@ class WorkloadBookValidationTests(TestCase):
 
         self.assertIn("Unknown Book Provided for Dev Book", errors)
 
+    def test_canonical_rule_rejects_missing_or_duplicate_engine_option(self):
+        for options in (
+            "Threads=1 Hash=16",
+            "option.EnteringKingRule=CSARule24 option.EnteringKingRule=CSARule24",
+            "option.EnteringKingRule=CSARule27",
+        ):
+            request = self.factory.post("/test/new/", {"dev_options": options})
+            errors = []
+
+            verify_canonical_rule(errors, request, "dev_options", "Dev Options")
+
+            self.assertEqual(
+                errors,
+                ["Dev Options must select exactly one EnteringKingRule=CSARule24"],
+            )
+
 
 class WorkloadBookPersistenceTests(TestCase):
     def setUp(self):
@@ -81,6 +99,7 @@ class WorkloadBookPersistenceTests(TestCase):
         self.dev_book = Book.objects.create(sha256="ABCDEF12", name="dev-book.db", engine="tanuki-", author="tester")
         self.base_book = Book.objects.create(sha256="12345678", name="base-book.db", engine="tanuki-", author="tester")
         self.opening_book = next(iter(OPENBENCH_CONFIG["books"].keys()))
+        self.rule_profile = RuleProfile.objects.create(**canonical_profile_fields())
 
     def test_create_new_test_persists_dev_and_base_book_metadata(self):
         request = self.factory.post(
@@ -90,13 +109,13 @@ class WorkloadBookPersistenceTests(TestCase):
                 "upload_pgns": "FALSE",
                 "dev_repo": "https://github.com/example/dev",
                 "dev_engine": "tanuki-",
-                "dev_options": "Threads=1 Hash=16",
+                "dev_options": "Threads=1 Hash=16 option.EnteringKingRule=CSARule24",
                 "dev_network": "",
                 "dev_time_control": "8.0+0.08",
                 "dev_book": self.dev_book.sha256,
                 "base_repo": "https://github.com/example/base",
                 "base_engine": "tanuki-",
-                "base_options": "Threads=1 Hash=16",
+                "base_options": "Threads=1 Hash=16 option.EnteringKingRule=CSARule24",
                 "base_network": "",
                 "base_time_control": "8.0+0.08",
                 "base_book": self.base_book.sha256,
@@ -129,6 +148,7 @@ class WorkloadBookPersistenceTests(TestCase):
         self.assertEqual(test.dev_book_name, self.dev_book.name)
         self.assertEqual(test.base_book_sha, self.base_book.sha256)
         self.assertEqual(test.base_book_name, self.base_book.name)
+        self.assertEqual(test.rule_profile, self.rule_profile)
 
 
 class WorkloadBookPresentationTests(TestCase):
@@ -148,11 +168,13 @@ class WorkloadBookPresentationTests(TestCase):
             sha="b" * 40,
             bench=222,
         )
+        self.rule_profile = RuleProfile.objects.create(**canonical_profile_fields())
 
     def create_workload(self, test_mode):
         return Test.objects.create(
             author="tester",
             upload_pgns="FALSE",
+            rule_profile=self.rule_profile,
             book_name=next(iter(OPENBENCH_CONFIG["books"].keys())),
             dev=self.dev_engine,
             dev_repo="https://github.com/example/dev",
@@ -193,6 +215,8 @@ class WorkloadBookPresentationTests(TestCase):
         self.assertContains(response, "dev-book.db")
         self.assertContains(response, "Base Book")
         self.assertContains(response, "base-book.db")
+        self.assertContains(response, "Rule Profile")
+        self.assertContains(response, "canonical-yaneuraou-csarule24-v1")
 
     def test_datagen_detail_page_shows_dev_and_base_books(self):
         test = self.create_workload("DATAGEN")
