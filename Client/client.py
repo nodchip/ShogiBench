@@ -28,6 +28,24 @@ import time
 import traceback
 import zipfile
 
+
+def read_password_file(path_value):
+    if not path_value or not os.path.isabs(path_value):
+        raise ValueError('OPENBENCH_PASSWORD_FILE must be an absolute path')
+    if os.path.islink(path_value) or not os.path.isfile(path_value):
+        raise ValueError('OPENBENCH_PASSWORD_FILE must be a regular file')
+    size = os.path.getsize(path_value)
+    if size <= 0 or size > 4096:
+        raise ValueError('OPENBENCH_PASSWORD_FILE has invalid size')
+    with open(path_value, 'rb') as stream:
+        try:
+            password = stream.read().decode('utf-8', errors='strict')
+        except UnicodeDecodeError:
+            raise ValueError('OPENBENCH_PASSWORD_FILE must be UTF-8') from None
+    if '\r' in password or '\n' in password or '\x00' in password:
+        raise ValueError('OPENBENCH_PASSWORD_FILE must contain one password')
+    return password
+
 class BadVersionException(Exception):
     def __init__(self, message='Wrong Client Version'):
         self.message = message
@@ -82,7 +100,11 @@ def parse_arguments():
 
     # We can use ENV variables for the Username, Passwords, and Servers
     req_user   = 'OPENBENCH_USERNAME' not in os.environ
-    req_pass   = 'OPENBENCH_PASSWORD' not in os.environ
+    password_from_environment = 'OPENBENCH_PASSWORD' in os.environ
+    password_from_file = 'OPENBENCH_PASSWORD_FILE' in os.environ
+    if password_from_environment and password_from_file:
+        raise ValueError('use only one OpenBench password input')
+    req_pass   = not password_from_environment and not password_from_file
     req_server = 'OPENBENCH_SERVER'   not in os.environ
 
     help_user   = 'Username. May also be provided via OPENBENCH_USERNAME environment variable'
@@ -108,7 +130,12 @@ def parse_arguments():
     # Replace with ENV variables if needed
     args, unknown = p.parse_known_args()
     args.username = args.username if args.username else os.environ['OPENBENCH_USERNAME']
-    args.password = args.password if args.password else os.environ['OPENBENCH_PASSWORD']
+    if args.password:
+        pass
+    elif password_from_file:
+        args.password = read_password_file(os.environ['OPENBENCH_PASSWORD_FILE'])
+    else:
+        args.password = os.environ['OPENBENCH_PASSWORD']
     args.server   = args.server   if args.server   else os.environ['OPENBENCH_SERVER'  ]
 
     return args

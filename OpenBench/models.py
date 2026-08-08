@@ -21,7 +21,49 @@
 from django.db.models import CharField, IntegerField, BigIntegerField, BooleanField, FloatField
 from django.db.models import JSONField, ForeignKey, DateTimeField, OneToOneField
 from django.db.models import CASCADE, PROTECT, Model, TextChoices
+from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
+
+from OpenBench.rule_profiles import validate_rule_profile
+
+
+class RuleProfile(Model):
+
+    profile_id       = CharField(max_length=128, primary_key=True)
+    authority_kind   = CharField(max_length=64)
+    source_repository = CharField(max_length=1024)
+    source_revision  = CharField(max_length=40)
+    semantics_sha256 = CharField(max_length=64)
+    semantics        = JSONField()
+
+    immutable_fields = (
+        'profile_id', 'authority_kind', 'source_repository', 'source_revision',
+        'semantics_sha256', 'semantics',
+    )
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._immutable_snapshot = {
+            name: getattr(instance, name) for name in cls.immutable_fields
+        }
+        return instance
+
+    def save(self, *args, **kwargs):
+        snapshot = getattr(self, '_immutable_snapshot', None)
+        if snapshot is not None:
+            if any(snapshot[name] != getattr(self, name) for name in self.immutable_fields):
+                raise ValidationError('rule profiles are immutable')
+        validate_rule_profile(self)
+        result = super().save(*args, **kwargs)
+        if snapshot is None:
+            self._immutable_snapshot = {
+                name: getattr(self, name) for name in self.immutable_fields
+            }
+        return result
+
+    def __str__(self):
+        return self.profile_id
 
 class Engine(Model):
 
@@ -111,6 +153,13 @@ class Test(Model):
     # Misc information
     author      = CharField(max_length=64)
     upload_pgns = CharField(max_length=16, default='FALSE')
+    rule_profile = ForeignKey(
+        RuleProfile,
+        PROTECT,
+        related_name='tests',
+        null=True,
+        blank=True,
+    )
 
     # Opening book settings
     book_name  = CharField(max_length=32)

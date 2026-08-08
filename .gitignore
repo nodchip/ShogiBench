@@ -4,6 +4,7 @@ Client/*
 credentials
 credentials.*
 db.sqlite3
+staticfiles/
 
 Scripts/Engines/*
 Scripts/Networks/*
@@ -21,3 +22,4 @@ Media/Events/*
 *.lock
 *.epd
 .worktrees/
+.venv/
