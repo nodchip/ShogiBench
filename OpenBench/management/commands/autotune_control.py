@@ -6,6 +6,7 @@ import sys
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Sum
 
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
@@ -49,6 +50,18 @@ def _response(action, status, **values):
 def _terminal_outcome(test):
     if not test.finished:
         return None, None
+    if test.error:
+        failures = test.test.aggregate(
+            crashes=Sum('crashes'),
+            timelosses=Sum('timeloss'),
+        )
+        crashes = failures['crashes'] or 0
+        timelosses = failures['timelosses'] or 0
+        return 'worker_game_error', {
+            'crashes': crashes,
+            'timelosses': timelosses,
+            'illegal_or_unclassified': crashes == 0,
+        }
     if test.passed:
         return 'native_pass', None
     if test.failed:

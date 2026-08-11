@@ -89,3 +89,15 @@ class WorkloadPayloadBookTests(TestCase):
             workload["test"]["rule_profile_semantics_sha256"],
             "be4a1cff6b5bf416f89f9ed17bc70676f9272bf32fd27dd373b8fb4d8d997a93",
         )
+
+        test.workload_size = 1
+        test.max_games = 2
+        test.save(update_fields=("workload_size", "max_games"))
+        machine.info = {"concurrency": 64, "physical_cores": 64, "sockets": 1}
+        machine.save(update_fields=("info",))
+        acceptance = workload_to_dictionary(test, result, machine)
+        self.assertEqual(acceptance["distribution"], {
+            "runner-count": 1,
+            "concurrency-per": 1,
+            "games-per-runner": 2,
+        })

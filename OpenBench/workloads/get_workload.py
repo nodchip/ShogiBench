@@ -390,6 +390,15 @@ def game_distribution(test, machine):
     # SPSA is treated specially, if we are distributing many parameter sets at once
     is_multiple_spsa = test.test_mode == 'SPSA' and test.spsa['distribution_type'] == 'MULTIPLE'
 
+    # The fixed autotune acceptance pair must remain exactly one game pair,
+    # regardless of the worker's available concurrency.
+    if test.test_mode == 'GAMES' and test.max_games == 2 and test.workload_size == 1:
+        return {
+            'runner-count'     : 1,
+            'concurrency-per'  : 1,
+            'games-per-runner' : 2,
+        }
+
     return {
         'runner-count'     : spsa_count if is_multiple_spsa else worker_sockets,
         'concurrency-per'  : 2 if is_multiple_spsa else max_concurrency,

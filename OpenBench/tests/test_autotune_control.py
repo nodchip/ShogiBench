@@ -7,7 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
+from OpenBench.models import Engine, LogEvent, Machine, Network, Profile, Result, RuleProfile, Test
 from OpenBench.rule_profiles import canonical_profile_fields
 
 POLICY = {
@@ -145,6 +145,25 @@ class AutotuneControlTests(TestCase):
             'base_engine_sha': 'b' * 64,
         })
         self.assertNotIn(raw_summary, json.dumps(observed))
+
+    def test_get_classifies_bounded_worker_game_error_before_native_result(self):
+        created = self._request('create', self._create_payload())
+        test = Test.objects.get(pk=created['test_id'])
+        test.finished = True
+        test.failed = True
+        test.error = True
+        test.save(update_fields=('finished', 'failed', 'error', 'updated'))
+        machine = Machine.objects.create(user=self.other_user, info={})
+        Result.objects.create(test=test, machine=machine, crashes=2, timeloss=3)
+
+        observed = self._request('get', {'test_id': test.id})
+
+        self.assertEqual(observed['terminal_reason'], 'worker_game_error')
+        self.assertEqual(observed['terminal_diagnostic'], {
+            'crashes': 2,
+            'timelosses': 3,
+            'illegal_or_unclassified': False,
+        })
 
     def test_explicit_operator_abort_is_a_distinct_owned_stop_reason(self):
         created = self._request('create', self._create_payload())
