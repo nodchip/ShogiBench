@@ -13,6 +13,12 @@ MAX_REQUEST_BYTES = 65536
 MAX_RESPONSE_BYTES = 65536
 LOCAL_ADDRESSES = frozenset({'127.0.0.1', '::1'})
 TARGETS = {
+    'material': {
+        'command': 'autotune_material',
+        'actions': frozenset({'get'}),
+        'timeout': 120,
+        'statuses': frozenset({'observed'}),
+    },
     'network': {
         'command': 'autotune_register_network',
         'actions': frozenset({'register', 'get'}),

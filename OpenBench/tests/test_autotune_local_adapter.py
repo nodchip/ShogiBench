@@ -99,6 +99,27 @@ class AutotuneLocalAdapterTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(calls[0][2:4], ('autotune_control', 'get'))
 
+    def test_material_get_maps_to_fixed_read_only_command(self):
+        calls = []
+
+        def runner(arguments, **kwargs):
+            calls.append(arguments)
+            return self._completed('get', 'observed')
+
+        with (
+            override_settings(BASE_DIR=self.root.resolve()),
+            self._environment(),
+            patch('OpenBench.autotune_local_adapter.subprocess.run', runner),
+        ):
+            response = Client(REMOTE_ADDR='127.0.0.1').post(
+                '/api/autotune-local/v1/material/get/',
+                data=b'{"schema_version":1,"action":"get"}',
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls[0][2:4], ('autotune_material', 'get'))
+
     def test_lan_unknown_action_and_wrong_method_never_spawn(self):
         with patch('OpenBench.autotune_local_adapter.subprocess.run') as runner:
             lan = Client(REMOTE_ADDR='192.0.2.10').post(
