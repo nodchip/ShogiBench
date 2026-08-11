@@ -13,6 +13,7 @@ from OpenBench.models import Book, Engine, Network
 MAX_REQUEST_BYTES = 65536
 MAX_MATERIAL_BYTES = 16 * 1024 * 1024 * 1024
 ENGINE = 'tanuki-'
+BOOK_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
 
 
@@ -138,7 +139,7 @@ class Command(BaseCommand):
         if not Engine.objects.filter(name=ENGINE).exists():
             raise MaterialError('engine_missing')
         networks = list(Network.objects.filter(engine=ENGINE, sha256__iexact=network_sha256[:8]))
-        books = list(Book.objects.filter(engine=ENGINE, sha256__iexact=book_sha256[:8]))
+        books = list(Book.objects.filter(engine=ENGINE, name=BOOK_NAME))
         if len(networks) != 1:
             raise MaterialError('network_not_unique')
         if len(books) != 1:

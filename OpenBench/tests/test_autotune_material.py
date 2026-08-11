@@ -33,7 +33,7 @@ class AutotuneMaterialTests(TestCase):
         )
         self.book = Book.objects.create(
             sha256=self.book_hash[:8].upper(),
-            name='book',
+            name='SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd',
             engine='tanuki-',
             author='bootstrap',
         )
@@ -113,6 +113,6 @@ class AutotuneMaterialTests(TestCase):
             self.assertRaises(CommandError),
         ):
             call_command('autotune_material', 'inspect', stdout=stdout)
-        self.assertEqual(json.loads(stdout.getvalue())['error'], 'book_not_unique')
+        self.assertEqual(json.loads(stdout.getvalue())['error'], 'book_storage_mismatch')
         self.assertEqual(Network.objects.count(), 1)
         self.assertEqual(Book.objects.count(), 1)
