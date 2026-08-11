@@ -17,12 +17,15 @@ class WindowsSettingsTests(SimpleTestCase):
             secret = root / 'signing-key'
             secret.write_text('s' * 64, encoding='utf-8')
             config = root / 'local.json'
+            artifacts = root / 'artifacts'
+            artifacts.mkdir()
             config.write_text(json.dumps({
                 'schema_version': 1,
                 'profile_id': 'shogibench-windows-v1',
                 'autotune_username': 'autotune',
                 'rating_policies': {'acceptance': {'workload_size': 2}},
                 'django_signing_key_path': str(secret.resolve()),
+                'training_artifact_root': str(artifacts.resolve()),
             }), encoding='utf-8')
 
             with patch.dict(os.environ, {'SHOGIBENCH_LOCAL_CONFIG_PATH': str(config.resolve())}):
@@ -35,6 +38,7 @@ class WindowsSettingsTests(SimpleTestCase):
         self.assertEqual(windows.EMAIL_BACKEND, 'django.core.mail.backends.dummy.EmailBackend')
         self.assertEqual(windows.SECRET_KEY, 's' * 64)
         self.assertEqual(windows.AUTOTUNE_USERNAME, 'autotune')
+        self.assertEqual(windows.AUTOTUNE_TRAINING_ARTIFACT_ROOT, str(artifacts.resolve()))
 
     def test_windows_settings_reject_unknown_local_property(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -42,12 +46,15 @@ class WindowsSettingsTests(SimpleTestCase):
             secret = root / 'signing-key'
             secret.write_text('s' * 64, encoding='utf-8')
             config = root / 'local.json'
+            artifacts = root / 'artifacts'
+            artifacts.mkdir()
             config.write_text(json.dumps({
                 'schema_version': 1,
                 'profile_id': 'shogibench-windows-v1',
                 'autotune_username': 'autotune',
                 'rating_policies': {},
                 'django_signing_key_path': str(secret.resolve()),
+                'training_artifact_root': str(artifacts.resolve()),
                 'unexpected': True,
             }), encoding='utf-8')
 

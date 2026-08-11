@@ -87,6 +87,12 @@ class AutotuneControlTests(TestCase):
         observed = self._request('get', {'test_id': test.id})
         self.assertEqual(observed['status'], 'observed')
         self.assertFalse(observed['state']['finished'])
+        self.assertEqual(observed['stage'], 'acceptance')
+        self.assertEqual(observed['policy'], POLICY)
+        self.assertEqual(observed['dev'], self._create_payload()['dev'])
+        self.assertEqual(observed['base'], self._create_payload()['base'])
+        self.assertEqual(observed['statistics']['games'], 0)
+        self.assertEqual(observed['statistics']['penta'], [0, 0, 0, 0, 0])
 
         stopped = self._request(
             'stop', {'test_id': test.id, 'reason': 'external_game_budget'},

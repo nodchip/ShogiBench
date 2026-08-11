@@ -41,6 +41,68 @@ def _response(action, status, **values):
     }
 
 
+def _policy_from_test(test):
+    return {
+        'alpha': test.alpha,
+        'beta': test.beta,
+        'dev_time_control': test.dev_time_control,
+        'base_time_control': test.base_time_control,
+        'elo_lower': test.elolower,
+        'elo_upper': test.eloupper,
+        'priority': test.priority,
+        'throughput': test.throughput,
+        'workload_size': test.workload_size,
+        'upload_pgns': test.upload_pgns == 'TRUE',
+    }
+
+
+def _side_from_test(test, prefix):
+    return {
+        'engine': getattr(test, f'{prefix}_engine'),
+        'repo': getattr(test, f'{prefix}_repo'),
+        'options': getattr(test, f'{prefix}_options'),
+        'network': getattr(test, f'{prefix}_network'),
+        'book': getattr(test, f'{prefix}_book_sha'),
+    }
+
+
+def _stage_from_test(test):
+    observed = _policy_from_test(test)
+    policies = getattr(settings, 'AUTOTUNE_RATING_POLICIES', {})
+    matches = [name for name, policy in policies.items() if policy == observed]
+    if len(matches) != 1:
+        raise ControlError('test_policy_not_reconcilable')
+    return matches[0]
+
+
+def _observation(test, stage=None):
+    return {
+        'test_id': test.id,
+        'rule_profile_id': test.rule_profile_id,
+        'stage': stage or _stage_from_test(test),
+        'policy': _policy_from_test(test),
+        'dev': _side_from_test(test, 'dev'),
+        'base': _side_from_test(test, 'base'),
+        'test_mode': test.test_mode,
+        'max_games': test.max_games,
+        'state': _state(test),
+        'statistics': {
+            'games': test.games,
+            'wins': test.wins,
+            'losses': test.losses,
+            'draws': test.draws,
+            'penta': [test.LL, test.LD, test.DD, test.DW, test.WW],
+            'llr': {
+                'lower': test.lowerllr,
+                'current': test.currentllr,
+                'upper': test.upperllr,
+            },
+        },
+        'created_at': test.creation.isoformat(),
+        'updated_at': test.updated.isoformat(),
+    }
+
+
 class Command(BaseCommand):
     help = 'Perform one policy-bounded autotune create, get, or stop operation.'
 
@@ -207,13 +269,7 @@ class Command(BaseCommand):
             log_file='',
             test_id=test.id,
         )
-        return _response(
-            'create',
-            'created',
-            test_id=test.id,
-            rule_profile_id=rule_profile.profile_id,
-            state=_state(test),
-        )
+        return _response('create', 'created', **_observation(test, request['stage']))
 
     @transaction.atomic
     def _owned_test(self, test_id):
@@ -231,14 +287,7 @@ class Command(BaseCommand):
 
     def _get(self, request):
         test = self._owned_test(request['test_id'])
-        return _response(
-            'get',
-            'observed',
-            test_id=test.id,
-            rule_profile_id=test.rule_profile_id,
-            state=_state(test),
-            games=test.games,
-        )
+        return _response('get', 'observed', **_observation(test))
 
     @transaction.atomic
     def _stop(self, request):

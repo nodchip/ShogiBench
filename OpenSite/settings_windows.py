@@ -28,7 +28,7 @@ def _load_local_config():
         raise RuntimeError('local config must be valid JSON') from None
     expected = {
         'schema_version', 'profile_id', 'autotune_username',
-        'rating_policies', 'django_signing_key_path',
+        'rating_policies', 'django_signing_key_path', 'training_artifact_root',
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise RuntimeError('local config has unexpected properties')
@@ -38,6 +38,13 @@ def _load_local_config():
         raise RuntimeError('autotune username is invalid')
     if not isinstance(value['rating_policies'], dict):
         raise RuntimeError('rating policies are invalid')
+    artifact_root = Path(value['training_artifact_root'])
+    if (
+        not artifact_root.is_absolute()
+        or artifact_root.is_symlink()
+        or not artifact_root.is_dir()
+    ):
+        raise RuntimeError('training artifact root must be an absolute directory')
     return value
 
 
@@ -57,3 +64,4 @@ CSRF_TRUSTED_ORIGINS = []
 EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
 AUTOTUNE_USERNAME = _LOCAL_CONFIG['autotune_username']
 AUTOTUNE_RATING_POLICIES = _LOCAL_CONFIG['rating_policies']
+AUTOTUNE_TRAINING_ARTIFACT_ROOT = _LOCAL_CONFIG['training_artifact_root']
