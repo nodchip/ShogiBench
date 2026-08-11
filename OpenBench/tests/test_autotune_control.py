@@ -7,9 +7,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-from OpenBench.models import Book, Engine, LogEvent, Network, Profile, RuleProfile, Test
+from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
 from OpenBench.rule_profiles import canonical_profile_fields
-
 
 POLICY = {
     'alpha': 0.05,
@@ -22,6 +21,14 @@ POLICY = {
     'throughput': 1,
     'upload_pgns': True,
     'workload_size': 1,
+}
+OPENING = {
+    'name': 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd',
+    'sha256': 'd' * 64,
+    'source': 'https://example.invalid/opening.zip',
+}
+OPENBENCH_CONFIG = {
+    'books': {OPENING['name']: {'sha': OPENING['sha256'], 'source': OPENING['source']}},
 }
 
 
@@ -40,10 +47,11 @@ class AutotuneControlTests(TestCase):
             name='public-engine', source='https://example.invalid/source', sha='b' * 64, bench=1,
         )
         Network.objects.create(
-            default=True, sha256='12345678', name='network', engine=self.engine.name, author='operator',
-        )
-        Book.objects.create(
-            sha256='87654321', name='book', engine=self.engine.name, author='operator',
+            default=True,
+            sha256='12345678',
+            name='network',
+            engine=self.engine.name,
+            author='operator',
         )
 
     def _request(self, action, payload):
@@ -53,7 +61,13 @@ class AutotuneControlTests(TestCase):
             **payload,
         }).encode('utf-8')))
         stdout = io.StringIO()
-        with patch('sys.stdin', stdin):
+        with (
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_control.OPENBENCH_CONFIG',
+                OPENBENCH_CONFIG,
+            ),
+        ):
             call_command('autotune_control', action, stdout=stdout)
         return json.loads(stdout.getvalue())
 
@@ -63,12 +77,12 @@ class AutotuneControlTests(TestCase):
             'repo': 'https://example.invalid/repository',
             'options': 'option.EnteringKingRule=CSARule24',
             'network': '12345678',
-            'book': '87654321',
         }
         return {
             'rule_profile_id': self.rule.profile_id,
             'stage': 'acceptance',
             'policy': POLICY,
+            'opening': OPENING,
             'dev': side,
             'base': side,
         }
@@ -83,12 +97,18 @@ class AutotuneControlTests(TestCase):
         self.assertEqual(test.test_mode, 'GAMES')
         self.assertEqual(test.max_games, 2)
         self.assertEqual(test.workload_size, 1)
+        self.assertEqual(test.book_name, OPENING['name'])
+        self.assertEqual(test.dev_book_sha, '')
+        self.assertEqual(test.dev_book_name, '')
+        self.assertEqual(test.base_book_sha, '')
+        self.assertEqual(test.base_book_name, '')
 
         observed = self._request('get', {'test_id': test.id})
         self.assertEqual(observed['status'], 'observed')
         self.assertFalse(observed['state']['finished'])
         self.assertEqual(observed['stage'], 'acceptance')
         self.assertEqual(observed['policy'], POLICY)
+        self.assertEqual(observed['opening'], OPENING)
         self.assertEqual(observed['dev'], self._create_payload()['dev'])
         self.assertEqual(observed['base'], self._create_payload()['base'])
         self.assertEqual(observed['statistics']['games'], 0)
@@ -123,7 +143,14 @@ class AutotuneControlTests(TestCase):
             **payload,
         }).encode('utf-8')))
 
-        with patch('sys.stdin', stdin), self.assertRaises(CommandError):
+        with (
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_control.OPENBENCH_CONFIG',
+                OPENBENCH_CONFIG,
+            ),
+            self.assertRaises(CommandError),
+        ):
             call_command('autotune_control', 'create', stdout=stdout)
 
         self.assertEqual(json.loads(stdout.getvalue())['error'], 'rating_policy_mismatch')
@@ -139,7 +166,14 @@ class AutotuneControlTests(TestCase):
             **payload,
         }).encode('utf-8')))
 
-        with patch('sys.stdin', stdin), self.assertRaises(CommandError):
+        with (
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_control.OPENBENCH_CONFIG',
+                OPENBENCH_CONFIG,
+            ),
+            self.assertRaises(CommandError),
+        ):
             call_command('autotune_control', 'create', stdout=stdout)
 
         self.assertEqual(json.loads(stdout.getvalue())['error'], 'engine_rule_option_mismatch')

@@ -6,11 +6,12 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from OpenBench.models import Book, Engine, LogEvent, Network, Profile, RuleProfile, Test
+from OpenBench.config import OPENBENCH_CONFIG
+from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
 from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonical_rule
 
-
 MAX_REQUEST_BYTES = 65536
+OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
 class ControlError(Exception):
     def __init__(self, code):
         super().__init__(code)
@@ -62,7 +63,23 @@ def _side_from_test(test, prefix):
         'repo': getattr(test, f'{prefix}_repo'),
         'options': getattr(test, f'{prefix}_options'),
         'network': getattr(test, f'{prefix}_network'),
-        'book': getattr(test, f'{prefix}_book_sha'),
+    }
+
+
+def _opening_from_test(test):
+    books = OPENBENCH_CONFIG.get('books') if isinstance(OPENBENCH_CONFIG, dict) else None
+    opening = books.get(test.book_name) if isinstance(books, dict) else None
+    if (
+        test.book_name != OPENING_NAME
+        or not isinstance(opening, dict)
+        or set(opening) != {'sha', 'source'}
+        or not all(isinstance(opening[name], str) and opening[name] for name in opening)
+    ):
+        raise ControlError('test_opening_not_reconcilable')
+    return {
+        'name': test.book_name,
+        'sha256': opening['sha'],
+        'source': opening['source'],
     }
 
 
@@ -81,6 +98,7 @@ def _observation(test, stage=None):
         'rule_profile_id': test.rule_profile_id,
         'stage': stage or _stage_from_test(test),
         'policy': _policy_from_test(test),
+        'opening': _opening_from_test(test),
         'dev': _side_from_test(test, 'dev'),
         'base': _side_from_test(test, 'base'),
         'test_mode': test.test_mode,
@@ -145,7 +163,10 @@ class Command(BaseCommand):
     @staticmethod
     def _request_fields(action):
         if action == 'create':
-            return ('schema_version', 'action', 'rule_profile_id', 'stage', 'policy', 'dev', 'base')
+            return (
+                'schema_version', 'action', 'rule_profile_id', 'stage', 'policy',
+                'opening', 'dev', 'base',
+            )
         if action == 'get':
             return ('schema_version', 'action', 'test_id')
         return ('schema_version', 'action', 'test_id', 'reason')
@@ -196,7 +217,7 @@ class Command(BaseCommand):
     def _side(value):
         side = _exact_object(
             value,
-            ('engine', 'repo', 'options', 'network', 'book'),
+            ('engine', 'repo', 'options', 'network'),
             'invalid_engine_shape',
         )
         if not all(isinstance(side[name], str) for name in side):
@@ -206,10 +227,30 @@ class Command(BaseCommand):
         try:
             engine = Engine.objects.get(name=side['engine'])
             network = Network.objects.get(engine=side['engine'], sha256=side['network'])
-            book = Book.objects.get(engine=side['engine'], sha256=side['book'])
-        except (Engine.DoesNotExist, Network.DoesNotExist, Book.DoesNotExist):
+        except (Engine.DoesNotExist, Network.DoesNotExist):
             raise ControlError('engine_material_missing') from None
-        return side, engine, network, book
+        return side, engine, network
+
+    @staticmethod
+    def _opening(value):
+        opening = _exact_object(
+            value,
+            ('name', 'sha256', 'source'),
+            'invalid_opening_shape',
+        )
+        if not all(isinstance(opening[name], str) and opening[name] for name in opening):
+            raise ControlError('invalid_opening_value')
+        books = OPENBENCH_CONFIG.get('books') if isinstance(OPENBENCH_CONFIG, dict) else None
+        configured = books.get(opening['name']) if isinstance(books, dict) else None
+        if (
+            opening['name'] != OPENING_NAME
+            or not isinstance(configured, dict)
+            or set(configured) != {'sha', 'source'}
+            or configured.get('sha') != opening['sha256']
+            or configured.get('source') != opening['source']
+        ):
+            raise ControlError('opening_config_mismatch')
+        return opening
 
     @transaction.atomic
     def _create(self, request):
@@ -218,8 +259,9 @@ class Command(BaseCommand):
         rule_profile = self._profile()
         actor = self._actor(self._username())
         policy = self._policy(request['stage'], request['policy'])
-        dev, dev_engine, dev_network, dev_book = self._side(request['dev'])
-        base, base_engine, base_network, base_book = self._side(request['base'])
+        opening = self._opening(request['opening'])
+        dev, dev_engine, dev_network = self._side(request['dev'])
+        base, base_engine, base_network = self._side(request['base'])
         acceptance_pair = request['stage'] == 'acceptance'
         if acceptance_pair and policy['workload_size'] != 1:
             raise ControlError('configured_policy_invalid')
@@ -228,15 +270,15 @@ class Command(BaseCommand):
             author=actor.user.username,
             upload_pgns='TRUE' if policy['upload_pgns'] else 'FALSE',
             rule_profile=rule_profile,
-            book_name=base_book.name,
+            book_name=opening['name'],
             dev=dev_engine,
             dev_repo=dev['repo'],
             dev_engine=dev['engine'],
             dev_options=dev['options'],
             dev_network=dev['network'],
             dev_netname=dev_network.name,
-            dev_book_sha=dev['book'],
-            dev_book_name=dev_book.name,
+            dev_book_sha='',
+            dev_book_name='',
             dev_time_control=policy['dev_time_control'],
             base=base_engine,
             base_repo=base['repo'],
@@ -244,8 +286,8 @@ class Command(BaseCommand):
             base_options=base['options'],
             base_network=base['network'],
             base_netname=base_network.name,
-            base_book_sha=base['book'],
-            base_book_name=base_book.name,
+            base_book_sha='',
+            base_book_name='',
             base_time_control=policy['base_time_control'],
             workload_size=policy['workload_size'],
             priority=policy['priority'],
