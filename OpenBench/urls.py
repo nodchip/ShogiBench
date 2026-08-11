@@ -19,8 +19,15 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import django.urls, OpenBench.views
+from OpenBench.autotune_local_adapter import autotune_local_adapter
 
 urlpatterns = [
+
+    # Loopback-only fixed adapter for the Goal-driven control plane
+    django.urls.path(
+        r'api/autotune-local/v1/<str:target>/<str:action>/',
+        autotune_local_adapter,
+    ),
 
     # Links for account management
     django.urls.path(r'register/', OpenBench.views.register),
