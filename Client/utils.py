@@ -178,7 +178,14 @@ def check_for_engine_binary(out_path):
         os.rename(out_path, '%s.exe' % (out_path))
         return '%s.exe' % (out_path)
 
-def makefile_command(net_path, make_path, out_path, compiler):
+def makefile_command(net_path, make_path, out_path, compiler, build=None):
+
+    command_recipe = (build or {}).get('command')
+    if command_recipe:
+        return [
+            'make', '-j%d' % command_recipe['jobs'], command_recipe['target'],
+            *command_recipe['arguments'], 'EXE=%s' % out_path,
+        ]
 
     # Build with -j, and EXE= to contol the output location
     command = ['make', '-j', 'EXE=%s' % (out_path)]
@@ -341,7 +348,7 @@ def download_book(server, username, password, engine, book_name, book_sha, book_
         os.remove(book_path)
         raise OpenBenchCorruptedBookException('Invalid SHA for %s' % (book_name))
 
-def download_public_engine(engine, net_path, branch, source, make_path, out_path, compiler=None):
+def download_public_engine(engine, net_path, branch, source, build, out_path, compiler=None):
 
     # Check to see if we already have the binary
     if check_for_engine_binary(out_path):
@@ -369,9 +376,11 @@ def download_public_engine(engine, net_path, branch, source, make_path, out_path
         os.rename(unzip_root, src_path)
 
         # Prepare the MAKEFILE command
-        make_path = os.path.join(src_path, make_path)
+        make_path = os.path.join(src_path, build['path'])
         bin_path  = os.path.join(make_path, os.path.basename(out_path))
-        make_cmd  = makefile_command(net_path, make_path, os.path.basename(out_path), compiler)
+        make_cmd  = makefile_command(
+            net_path, make_path, os.path.basename(out_path), compiler, build,
+        )
 
         # Build the engine, which will produce a binary to bin_path, to be moved after
         process     = subprocess.Popen(make_cmd, cwd=make_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

@@ -528,9 +528,15 @@ class MatchRunner:
         proto   = ["uci", "usi"][MatchRunner.is_shogi(config)]
         control = scale_time_control(config.workload, scale_factor, branch)
 
-        # Private engines, when using Networks, must set them via UCI
-        if private and network and network != 'None':
-            options += ' EvalFile=%s' % (os.path.join('../Networks', network))
+        # Private network files and declared public external-network directories.
+        network_config = config.workload['test'][branch]['build'].get('network')
+        if network and network != 'None' and (private or network_config):
+            network_option = network_config['option'] if network_config else 'EvalFile'
+            network_path = (
+                os.path.join('../Networks', '%s.eval' % network)
+                if network_config else os.path.join('../Networks', network)
+            )
+            options += ' %s=%s' % (network_option, network_path)
             name    += '-%s' % (network)
 
         # Engine books are distributed separately and injected via USI options
@@ -1262,6 +1268,26 @@ def safe_download_network_weights(config, branch):
     credentials = (config.server, config.username, config.password)
     utils.download_network(*credentials, engine, net_name, net_sha, net_path)
 
+    network_config = config.workload['test'][branch]['build'].get('network')
+    if network_config:
+        runtime_dir = '%s.eval' % net_path
+        if os.path.islink(runtime_dir):
+            raise utils.OpenBenchCorruptedNetworkException(
+                'Invalid external network directory for %s' % net_name,
+            )
+        os.makedirs(runtime_dir, exist_ok=True)
+        runtime_path = os.path.join(runtime_dir, network_config['filename'])
+        try:
+            if not os.path.exists(runtime_path):
+                os.link(net_path, runtime_path)
+            if not os.path.samefile(net_path, runtime_path):
+                raise OSError('external network hardlink identity differs')
+        except OSError:
+            raise utils.OpenBenchCorruptedNetworkException(
+                'Invalid external network staging for %s' % net_name,
+            ) from None
+        return runtime_dir
+
     return net_path
 
 def safe_download_engine_book(config, branch):
@@ -1293,7 +1319,10 @@ def safe_download_engine(config, branch, net_path):
     source      = config.workload['test'][branch]['source']
     private     = config.workload['test'][branch]['private']
 
-    bin_name = utils.engine_binary_name(engine, commit_sha, net_path, private)
+    build = config.workload['test'][branch]['build']
+    external_network = build.get('network') is not None
+    binary_net_path = None if external_network else net_path
+    bin_name = utils.engine_binary_name(engine, commit_sha, binary_net_path, private)
     out_path = os.path.join('Engines', bin_name)
 
     if private:
@@ -1308,12 +1337,11 @@ def safe_download_engine(config, branch, net_path):
 
     else:
 
-        make_path = config.workload['test'][branch]['build']['path']
         compiler  = config.compilers[engine][0]
 
         try:
             return utils.download_public_engine(
-                engine, net_path, branch_name, source, make_path, out_path, compiler)
+                engine, net_path, branch_name, source, build, out_path, compiler)
 
         except utils.OpenBenchBuildFailedException as error:
 
@@ -1354,15 +1382,22 @@ def safe_run_benchmarks(config, branch, engine, network):
     private  = config.workload['test'][branch]['private']
     expected = int(config.workload['test'][branch]['bench'])
     binary   = os.path.join('Engines', engine)
+    network_config = config.workload['test'][branch]['build'].get('network')
+    network_option = network_config['option'] if network_config else None
 
     for attempt in range(2):
         try:
             print('\nWarming up Benchmark for %s' % (name))
-            bench.run_benchmark(binary, network, private, 1, 1, expected)
+            bench.run_benchmark(
+                binary, network, private, 1, 1, expected,
+                network_option=network_option,
+            )
 
             print('\nRunning %dx Benchmarks for %s' % (config.threads, name))
             speed, nodes = bench.run_benchmark(
-                binary, network, private, config.threads, 1, expected)
+                binary, network, private, config.threads, 1, expected,
+                network_option=network_option,
+            )
             break
 
         except utils.OpenBenchBadBenchException as error:

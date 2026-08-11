@@ -7,7 +7,22 @@
         "path"      : "source",
         "compilers" : ["clang++"],
         "cpuflags"  : ["AVX2"],
-        "systems"   : ["Linux", "Windows", "Darwin"]
+        "systems"   : ["Linux", "Windows", "Darwin"],
+        "command"   : {
+            "jobs"      : 64,
+            "target"    : "normal",
+            "arguments" : [
+                "YANEURAOU_EDITION=YANEURAOU_ENGINE_NNUE_SFNNwoP1536",
+                "TARGET_CPU=AVX2",
+                "COMPILER=clang++",
+                "EVAL_EMBEDDING=OFF"
+            ]
+        },
+        "network" : {
+            "mode"     : "external_directory",
+            "option"   : "EvalDir",
+            "filename" : "nn.bin"
+        }
     },
 
     "test_presets" : {

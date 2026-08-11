@@ -137,6 +137,21 @@ def verify_engine_build(engine_name, conf):
         assert type(conf['build'].get('path')) == str
         assert type(conf['build'].get('compilers')) == list
         assert all(type(x) == str for x in conf['build']['compilers'])
+        command = conf['build'].get('command')
+        network = conf['build'].get('network')
+        if command is not None:
+            assert set(command) == {'jobs', 'target', 'arguments'}
+            assert type(command['jobs']) == int and 1 <= command['jobs'] <= 256
+            assert type(command['target']) == str and command['target']
+            assert type(command['arguments']) == list
+            assert all(type(x) == str and x for x in command['arguments'])
+        if network is not None:
+            assert set(network) == {'mode', 'option', 'filename'}
+            assert network['mode'] == 'external_directory'
+            assert type(network['option']) == str and network['option']
+            assert type(network['filename']) == str and network['filename']
+            assert os.path.basename(network['filename']) == network['filename']
+            assert network['filename'] not in ('.', '..')
 
 def verify_engine_test_preset(test_preset):
 

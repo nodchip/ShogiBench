@@ -68,7 +68,7 @@ def parse_stream_output(stream):
     bench = int(re.search(r'\d+', bench).group()) if bench else None
     return (bench, nps)
 
-def single_core_bench(binary, network, private, outqueue):
+def single_core_bench(binary, network, private, network_option, outqueue):
 
     # Basic command for Public engines
     cmd = ['./%s' % (binary)]
@@ -76,9 +76,9 @@ def single_core_bench(binary, network, private, outqueue):
     # 標準入力から入力する。
     input = "\n".join(['bench', 'quit']) + "\n"
 
-    # Adjust to handle setting Networks in Private engines
-    if network and private:
-        option = 'setoption name EvalFile value %s' % (network)
+    # Configure private-network files or declared public external-network directories.
+    if network and (private or network_option):
+        option = 'setoption name %s value %s' % (network_option or 'EvalFile', network)
         cmd = ['./%s' % (binary)]
         input = "\n".join([option, 'bench', 'quit']) + "\n"
 
@@ -92,13 +92,14 @@ def single_core_bench(binary, network, private, outqueue):
     except: # Signal an error with (None, None)
         outqueue.put((None, None))
 
-def multi_core_bench(binary, network, private, threads):
+def multi_core_bench(binary, network, private, threads, network_option=None):
 
     outqueue = multiprocessing.Queue()
 
     processes = [
         multiprocessing.Process(
-            target=single_core_bench, args=(binary, network, private, outqueue))
+            target=single_core_bench,
+            args=(binary, network, private, network_option, outqueue))
         for ii in range(threads)
     ]
 
@@ -116,13 +117,17 @@ def multi_core_bench(binary, network, private, threads):
         for process in processes:
             process.join()
 
-def run_benchmark(binary, network, private, threads, sets, expected=None):
+def run_benchmark(
+    binary, network, private, threads, sets, expected=None, network_option=None,
+):
 
     engine = os.path.basename(binary)
 
     benches, speeds = [], []
     for ii in range(sets):
-        for bench, speed in multi_core_bench(binary, network, private, threads):
+        for bench, speed in multi_core_bench(
+            binary, network, private, threads, network_option,
+        ):
             benches.append(bench); speeds.append(speed)
 
     if len(set(benches)) != 1:
