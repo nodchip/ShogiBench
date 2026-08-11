@@ -7,7 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-from OpenBench.models import Book, Engine, Network, Profile, RuleProfile, Test
+from OpenBench.models import Book, Engine, LogEvent, Network, Profile, RuleProfile, Test
 from OpenBench.rule_profiles import canonical_profile_fields
 
 
@@ -98,6 +98,19 @@ class AutotuneControlTests(TestCase):
             'stop', {'test_id': test.id, 'reason': 'external_game_budget'},
         )
         self.assertEqual(stopped['status'], 'stopped')
+
+    def test_explicit_operator_abort_is_a_distinct_owned_stop_reason(self):
+        created = self._request('create', self._create_payload())
+        stopped = self._request(
+            'stop',
+            {'test_id': created['test_id'], 'reason': 'operator_explicit_abort'},
+        )
+        self.assertEqual(stopped['status'], 'stopped')
+        self.assertEqual(stopped['reason'], 'operator_explicit_abort')
+        self.assertTrue(Test.objects.get(pk=created['test_id']).finished)
+        self.assertTrue(LogEvent.objects.filter(
+            test_id=created['test_id'], summary='AUTOTUNE_OPERATOR_ABORT',
+        ).exists())
         self.assertTrue(stopped['state']['finished'])
 
     def test_rejects_policy_mismatch_without_creating_test(self):

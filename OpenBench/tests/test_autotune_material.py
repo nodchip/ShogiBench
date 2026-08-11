@@ -54,11 +54,11 @@ class AutotuneMaterialTests(TestCase):
         value.update(changes)
         return value
 
-    def _call(self, payload):
+    def _call(self, payload, action='get'):
         stdin = io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode('utf-8')))
         stdout = io.StringIO()
         with override_settings(MEDIA_ROOT=str(self.media.resolve())), patch('sys.stdin', stdin):
-            call_command('autotune_material', 'get', stdout=stdout)
+            call_command('autotune_material', action, stdout=stdout)
         return json.loads(stdout.getvalue())
 
     def test_get_verifies_full_material_and_returns_actual_ids(self):
@@ -80,5 +80,39 @@ class AutotuneMaterialTests(TestCase):
         ):
             call_command('autotune_material', 'get', stdout=stdout)
         self.assertEqual(json.loads(stdout.getvalue())['error'], 'network_storage_mismatch')
+        self.assertEqual(Network.objects.count(), 1)
+        self.assertEqual(Book.objects.count(), 1)
+
+    def test_inspect_requires_full_hashes_and_returns_verified_sizes(self):
+        result = self._call({
+            'schema_version': 1,
+            'action': 'inspect',
+            'engine': 'tanuki-',
+            'network_sha256': self.network_hash,
+            'book_sha256': self.book_hash,
+        }, action='inspect')
+        self.assertEqual(result['status'], 'observed')
+        self.assertEqual(result['network']['id'], self.network.sha256)
+        self.assertEqual(result['network']['size'], len(self.network_bytes))
+        self.assertEqual(result['book']['id'], self.book.sha256)
+        self.assertEqual(result['book']['size'], len(self.book_bytes))
+
+    def test_inspect_rejects_hash_mismatch_without_listing_or_mutation(self):
+        stdout = io.StringIO()
+        payload = {
+            'schema_version': 1,
+            'action': 'inspect',
+            'engine': 'tanuki-',
+            'network_sha256': self.network_hash,
+            'book_sha256': '0' * 64,
+        }
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode('utf-8')))
+        with (
+            override_settings(MEDIA_ROOT=str(self.media.resolve())),
+            patch('sys.stdin', stdin),
+            self.assertRaises(CommandError),
+        ):
+            call_command('autotune_material', 'inspect', stdout=stdout)
+        self.assertEqual(json.loads(stdout.getvalue())['error'], 'book_not_unique')
         self.assertEqual(Network.objects.count(), 1)
         self.assertEqual(Book.objects.count(), 1)

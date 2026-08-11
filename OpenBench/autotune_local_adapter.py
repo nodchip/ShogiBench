@@ -15,7 +15,7 @@ LOCAL_ADDRESSES = frozenset({'127.0.0.1', '::1'})
 TARGETS = {
     'material': {
         'command': 'autotune_material',
-        'actions': frozenset({'get'}),
+        'actions': frozenset({'get', 'inspect'}),
         'timeout': 120,
         'statuses': frozenset({'observed'}),
     },

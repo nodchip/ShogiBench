@@ -291,7 +291,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def _stop(self, request):
-        if request['reason'] != 'external_game_budget':
+        if request['reason'] not in ('external_game_budget', 'operator_explicit_abort'):
             raise ControlError('invalid_stop_reason')
         test = self._owned_test(request['test_id'])
         if test.finished or test.passed or test.failed:
@@ -300,7 +300,11 @@ class Command(BaseCommand):
         test.save(update_fields=('finished', 'updated'))
         LogEvent.objects.create(
             author=test.author,
-            summary='AUTOTUNE_BUDGET_STOP',
+            summary=(
+                'AUTOTUNE_BUDGET_STOP'
+                if request['reason'] == 'external_game_budget'
+                else 'AUTOTUNE_OPERATOR_ABORT'
+            ),
             log_file='',
             test_id=test.id,
         )
@@ -309,6 +313,6 @@ class Command(BaseCommand):
             'stopped',
             test_id=test.id,
             rule_profile_id=test.rule_profile_id,
-            reason='external_game_budget',
+            reason=request['reason'],
             state=_state(test),
         )

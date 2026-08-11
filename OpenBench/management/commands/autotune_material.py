@@ -34,12 +34,12 @@ class Command(BaseCommand):
     help = 'Verify fixed ShogiBench network and book material without listing or mutation.'
 
     def add_arguments(self, parser):
-        parser.add_argument('action', choices=('get',))
+        parser.add_argument('action', choices=('get', 'inspect'))
 
     def handle(self, *args, **options):
         try:
             request = self._read_request(options['action'])
-            result = self._get(request)
+            result = self._get(request) if options['action'] == 'get' else self._inspect(request)
         except MaterialError as error:
             self.stdout.write(json.dumps({
                 'schema_version': 1,
@@ -59,14 +59,22 @@ class Command(BaseCommand):
             request = json.loads(raw.decode('utf-8'))
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise MaterialError('invalid_json') from None
-        if not isinstance(request, dict) or set(request) != {
-            'schema_version', 'action', 'engine', 'network', 'book',
-        }:
+        fields = (
+            {'schema_version', 'action', 'engine', 'network', 'book'}
+            if action == 'get'
+            else {'schema_version', 'action', 'engine', 'network_sha256', 'book_sha256'}
+        )
+        if not isinstance(request, dict) or set(request) != fields:
             raise MaterialError('invalid_request_shape')
         if request['schema_version'] != 1 or request['action'] != action:
             raise MaterialError('invalid_request_identity')
         if request['engine'] != ENGINE:
             raise MaterialError('invalid_engine')
+        if action == 'inspect':
+            for label in ('network_sha256', 'book_sha256'):
+                if not isinstance(request[label], str) or not SHA256.fullmatch(request[label]):
+                    raise MaterialError(f'invalid_{label}')
+            return request
         for label in ('network', 'book'):
             value = request[label]
             if not isinstance(value, dict) or set(value) != {'sha256', 'size'}:
@@ -108,19 +116,37 @@ class Command(BaseCommand):
         if size != expected['size'] or digest != expected['sha256']:
             raise MaterialError(f'{label}_storage_mismatch')
 
-    def _get(self, request):
+    @staticmethod
+    def _inspect_file(root, identifier, expected_sha256, label):
+        path = root / identifier
+        if path.is_symlink() or not path.is_file():
+            raise MaterialError(f'{label}_storage_missing')
+        try:
+            resolved = path.resolve(strict=True)
+            size = resolved.stat().st_size
+            digest = _sha256_file(resolved)
+        except OSError:
+            raise MaterialError(f'{label}_storage_unreadable') from None
+        if resolved.parent != root:
+            raise MaterialError(f'{label}_storage_invalid')
+        if digest != expected_sha256:
+            raise MaterialError(f'{label}_storage_mismatch')
+        return size
+
+    @staticmethod
+    def _records(network_sha256, book_sha256):
         if not Engine.objects.filter(name=ENGINE).exists():
             raise MaterialError('engine_missing')
-        network_prefix = request['network']['sha256'][:8]
-        book_prefix = request['book']['sha256'][:8]
-        networks = list(Network.objects.filter(engine=ENGINE, sha256__iexact=network_prefix))
-        books = list(Book.objects.filter(engine=ENGINE, sha256__iexact=book_prefix))
+        networks = list(Network.objects.filter(engine=ENGINE, sha256__iexact=network_sha256[:8]))
+        books = list(Book.objects.filter(engine=ENGINE, sha256__iexact=book_sha256[:8]))
         if len(networks) != 1:
             raise MaterialError('network_not_unique')
         if len(books) != 1:
             raise MaterialError('book_not_unique')
-        network = networks[0]
-        book = books[0]
+        return networks[0], books[0]
+
+    def _get(self, request):
+        network, book = self._records(request['network']['sha256'], request['book']['sha256'])
         root = self._media_root()
         self._verify_file(root, network.sha256, request['network'], 'network')
         self._verify_file(root, book.sha256, request['book'], 'book')
@@ -141,5 +167,32 @@ class Command(BaseCommand):
                 'name': book.name,
                 'sha256': request['book']['sha256'],
                 'size': request['book']['size'],
+            },
+        }
+
+    def _inspect(self, request):
+        network, book = self._records(request['network_sha256'], request['book_sha256'])
+        root = self._media_root()
+        network_size = self._inspect_file(
+            root, network.sha256, request['network_sha256'], 'network',
+        )
+        book_size = self._inspect_file(root, book.sha256, request['book_sha256'], 'book')
+        return {
+            'schema_version': 1,
+            'action': 'inspect',
+            'status': 'observed',
+            'engine': ENGINE,
+            'network': {
+                'id': network.sha256,
+                'name': network.name,
+                'sha256': request['network_sha256'],
+                'size': network_size,
+                'default': network.default,
+            },
+            'book': {
+                'id': book.sha256,
+                'name': book.name,
+                'sha256': request['book_sha256'],
+                'size': book_size,
             },
         }
