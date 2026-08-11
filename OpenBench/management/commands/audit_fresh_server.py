@@ -86,10 +86,13 @@ class Command(BaseCommand):
             "users": 3,
             "profiles": 3,
             "engines": 1,
-            "networks": 1,
             "rule_profiles": 1,
         }
         if any(counts[name] != value for name, value in required.items()):
+            return "minimal_seed_count_mismatch"
+        if counts["networks"] < 1:
+            return "minimal_seed_count_mismatch"
+        if phase == "bootstrap" and counts["networks"] != 1:
             return "minimal_seed_count_mismatch"
         if counts["books"] < 1 or media_file_count < counts["books"] + counts["networks"]:
             return "seed_material_count_mismatch"
