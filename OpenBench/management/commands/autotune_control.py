@@ -68,6 +68,8 @@ def _terminal_outcome(test):
                     'actual_bench': actual,
                     'expected_dev_bench': test.dev.bench,
                     'expected_base_bench': test.base.bench,
+                    'dev_engine_sha': test.dev.sha,
+                    'base_engine_sha': test.base.sha,
                 }
                 return 'worker_wrong_bench', diagnostic
             if 'non-deterministic benches' in summary:

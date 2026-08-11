@@ -141,6 +141,8 @@ class AutotuneControlTests(TestCase):
             'actual_bench': 123456,
             'expected_dev_bench': 1,
             'expected_base_bench': 1,
+            'dev_engine_sha': 'b' * 64,
+            'base_engine_sha': 'b' * 64,
         })
         self.assertNotIn(raw_summary, json.dumps(observed))
 
