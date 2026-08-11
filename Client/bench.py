@@ -40,13 +40,17 @@ import sys
 ## Local imports must only use "import x", never "from x import ..."
 
 import utils
+import codecs_util
 
 MAX_BENCH_TIME_SECONDS = 60
 
 def parse_stream_output(stream):
 
     nps = bench = None # Search through output Stream
-    for line in stream.decode('ascii').strip().split('\n')[::-1]:
+    decoded = codecs_util.decode(stream)
+    if decoded is None:
+        return (None, None)
+    for line in decoded.strip().split('\n')[::-1]:
 
         # Convert non alpha-numerics to spaces
         line = re.sub(r'[^a-zA-Z0-9 ]+', ' ', line)
