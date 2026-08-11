@@ -137,6 +137,11 @@ class AutotuneControlTests(TestCase):
         observed = self._request('get', {'test_id': test.id})
 
         self.assertEqual(observed['terminal_reason'], 'worker_wrong_bench')
+        self.assertEqual(observed['terminal_diagnostic'], {
+            'actual_bench': 123456,
+            'expected_dev_bench': 1,
+            'expected_base_bench': 1,
+        })
         self.assertNotIn(raw_summary, json.dumps(observed))
 
     def test_explicit_operator_abort_is_a_distinct_owned_stop_reason(self):

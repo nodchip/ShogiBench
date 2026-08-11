@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import sys
 
 from django.conf import settings
@@ -12,6 +13,9 @@ from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonic
 
 MAX_REQUEST_BYTES = 65536
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
+WRONG_BENCH = re.compile(r'wrong bench:\s*(\d{1,19})\s*$', re.IGNORECASE)
+
+
 class ControlError(Exception):
     def __init__(self, code):
         super().__init__(code)
@@ -42,31 +46,38 @@ def _response(action, status, **values):
     }
 
 
-def _terminal_reason(test):
+def _terminal_outcome(test):
     if not test.finished:
-        return None
+        return None, None
     if test.passed:
-        return 'native_pass'
+        return 'native_pass', None
     if test.failed:
-        return 'native_fail'
+        return 'native_fail', None
     events = LogEvent.objects.filter(test_id=test.id).order_by('-id')[:16]
     for event in events:
         if event.summary == 'AUTOTUNE_BUDGET_STOP':
-            return 'external_game_budget'
+            return 'external_game_budget', None
         if event.summary == 'AUTOTUNE_OPERATOR_ABORT':
-            return 'operator_explicit_abort'
+            return 'operator_explicit_abort', None
         if event.machine_id:
             summary = event.summary.lower()
             if 'wrong bench' in summary:
-                return 'worker_wrong_bench'
+                match = WRONG_BENCH.search(event.summary)
+                actual = int(match.group(1)) if match else None
+                diagnostic = None if actual is None or actual > 2**63 - 1 else {
+                    'actual_bench': actual,
+                    'expected_dev_bench': test.dev.bench,
+                    'expected_base_bench': test.base.bench,
+                }
+                return 'worker_wrong_bench', diagnostic
             if 'non-deterministic benches' in summary:
-                return 'worker_nondeterministic_bench'
+                return 'worker_nondeterministic_bench', None
             if 'bench exceeded max duration' in summary:
-                return 'worker_bench_timeout'
+                return 'worker_bench_timeout', None
             if 'failed to execute benchmark' in summary:
-                return 'worker_bench_execution_failed'
-            return 'worker_error'
-    return 'external_or_unknown_terminal'
+                return 'worker_bench_execution_failed', None
+            return 'worker_error', None
+    return 'external_or_unknown_terminal', None
 
 
 def _policy_from_test(test):
@@ -120,6 +131,7 @@ def _stage_from_test(test):
 
 
 def _observation(test, stage=None):
+    terminal_reason, terminal_diagnostic = _terminal_outcome(test)
     return {
         'test_id': test.id,
         'rule_profile_id': test.rule_profile_id,
@@ -131,7 +143,8 @@ def _observation(test, stage=None):
         'test_mode': test.test_mode,
         'max_games': test.max_games,
         'state': _state(test),
-        'terminal_reason': _terminal_reason(test),
+        'terminal_reason': terminal_reason,
+        'terminal_diagnostic': terminal_diagnostic,
         'statistics': {
             'games': test.games,
             'wins': test.wins,
