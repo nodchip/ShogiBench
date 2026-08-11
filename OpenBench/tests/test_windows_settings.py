@@ -32,6 +32,7 @@ class WindowsSettingsTests(SimpleTestCase):
                 'profile_id': 'shogibench-windows-v1',
                 'autotune_username': 'autotune',
                 'rating_policies': {'acceptance': {'workload_size': 2}},
+                'rating_game_budgets': {'acceptance': 2},
                 'django_signing_key_path': str(secret.resolve()),
                 'training_artifact_root': str(artifacts.resolve()),
             }), encoding='utf-8')
@@ -46,6 +47,7 @@ class WindowsSettingsTests(SimpleTestCase):
         self.assertEqual(windows.EMAIL_BACKEND, 'django.core.mail.backends.dummy.EmailBackend')
         self.assertEqual(windows.SECRET_KEY, 's' * 64)
         self.assertEqual(windows.AUTOTUNE_USERNAME, 'autotune')
+        self.assertEqual(windows.AUTOTUNE_RATING_GAME_BUDGETS, {'acceptance': 2})
         self.assertEqual(windows.AUTOTUNE_TRAINING_ARTIFACT_ROOT, str(artifacts.resolve()))
 
     def test_windows_settings_reject_unknown_local_property(self):
@@ -61,6 +63,7 @@ class WindowsSettingsTests(SimpleTestCase):
                 'profile_id': 'shogibench-windows-v1',
                 'autotune_username': 'autotune',
                 'rating_policies': {},
+                'rating_game_budgets': {},
                 'django_signing_key_path': str(secret.resolve()),
                 'training_artifact_root': str(artifacts.resolve()),
                 'unexpected': True,

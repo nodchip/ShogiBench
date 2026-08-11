@@ -148,6 +148,12 @@ def filter_valid_workloads(request, machine):
 
 def valid_hardware_assignment(workload, machine):
 
+    # Autotune-owned SPRT tests use max_games as an external allocation cap.
+    # The typed control command performs the reason-bearing stop after observing
+    # the cap; no additional workload may be assigned in the meantime.
+    if workload.test_mode == 'SPRT' and workload.max_games > 0 and workload.games >= workload.max_games:
+        return False
+
     # Extract thread requirements from the workload itself
     dev_threads  = int(OpenBench.utils.extract_option(workload.dev_options,  'Threads'))
     base_threads = int(OpenBench.utils.extract_option(workload.base_options, 'Threads'))
@@ -399,8 +405,30 @@ def game_distribution(test, machine):
             'games-per-runner' : 2,
         }
 
-    return {
+    distribution = {
         'runner-count'     : spsa_count if is_multiple_spsa else worker_sockets,
         'concurrency-per'  : 2 if is_multiple_spsa else max_concurrency,
         'games-per-runner' : 2 * test.workload_size * (1 if is_multiple_spsa else max_concurrency),
     }
+    if test.test_mode == 'SPRT' and test.max_games > 0:
+        remaining = max(0, test.max_games - test.games)
+        remaining -= remaining % 2
+        if remaining == 0:
+            return {
+                'runner-count'     : 0,
+                'concurrency-per'  : 0,
+                'games-per-runner' : 0,
+            }
+        default_total = distribution['runner-count'] * distribution['games-per-runner']
+        if remaining < default_total:
+            runner_count = min(distribution['runner-count'], max(1, remaining // 2))
+            games_per_runner = (remaining // runner_count) // 2 * 2
+            runner_count = max(1, min(runner_count, remaining // games_per_runner))
+            while runner_count * games_per_runner > remaining:
+                runner_count -= 1
+            distribution = {
+                'runner-count': runner_count,
+                'concurrency-per': min(max_concurrency, max(1, games_per_runner // 2)),
+                'games-per-runner': games_per_runner,
+            }
+    return distribution

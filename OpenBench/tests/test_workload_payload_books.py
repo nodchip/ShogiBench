@@ -101,3 +101,15 @@ class WorkloadPayloadBookTests(TestCase):
             "concurrency-per": 1,
             "games-per-runner": 2,
         })
+
+        test.test_mode = "SPRT"
+        test.workload_size = 32
+        test.max_games = 131072
+        test.games = 131040
+        test.save(update_fields=("test_mode", "workload_size", "max_games", "games"))
+        capped = workload_to_dictionary(test, result, machine)
+        self.assertEqual(capped["distribution"], {
+            "runner-count": 1,
+            "concurrency-per": 16,
+            "games-per-runner": 32,
+        })

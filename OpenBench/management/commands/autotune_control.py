@@ -139,7 +139,11 @@ def _opening_from_test(test):
 def _stage_from_test(test):
     observed = _policy_from_test(test)
     policies = getattr(settings, 'AUTOTUNE_RATING_POLICIES', {})
-    matches = [name for name, policy in policies.items() if policy == observed]
+    budgets = getattr(settings, 'AUTOTUNE_RATING_GAME_BUDGETS', {})
+    matches = [
+        name for name, policy in policies.items()
+        if policy == observed and budgets.get(name) == test.max_games
+    ]
     if len(matches) != 1:
         raise ControlError('test_policy_not_reconcilable')
     return matches[0]
@@ -221,7 +225,7 @@ class Command(BaseCommand):
         if action == 'create':
             return (
                 'schema_version', 'action', 'rule_profile_id', 'stage', 'policy',
-                'opening', 'dev', 'base',
+                'game_budget', 'opening', 'dev', 'base',
             )
         if action == 'get':
             return ('schema_version', 'action', 'test_id')
@@ -270,6 +274,24 @@ class Command(BaseCommand):
         return expected
 
     @staticmethod
+    def _game_budget(stage, supplied):
+        budgets = getattr(settings, 'AUTOTUNE_RATING_GAME_BUDGETS', {})
+        if not isinstance(budgets, dict) or stage not in budgets:
+            raise ControlError('configured_policy_invalid')
+        expected = budgets[stage]
+        if (
+            isinstance(expected, bool)
+            or not isinstance(expected, int)
+            or expected < 2
+            or expected > 1000000
+            or expected % 2
+        ):
+            raise ControlError('configured_policy_invalid')
+        if supplied != expected:
+            raise ControlError('rating_budget_mismatch')
+        return expected
+
+    @staticmethod
     def _side(value):
         side = _exact_object(
             value,
@@ -315,11 +337,12 @@ class Command(BaseCommand):
         rule_profile = self._profile()
         actor = self._actor(self._username())
         policy = self._policy(request['stage'], request['policy'])
+        game_budget = self._game_budget(request['stage'], request['game_budget'])
         opening = self._opening(request['opening'])
         dev, dev_engine, dev_network = self._side(request['dev'])
         base, base_engine, base_network = self._side(request['base'])
         acceptance_pair = request['stage'] == 'acceptance'
-        if acceptance_pair and policy['workload_size'] != 1:
+        if acceptance_pair and (policy['workload_size'] != 1 or game_budget != 2):
             raise ControlError('configured_policy_invalid')
 
         test = Test.objects.create(
@@ -349,7 +372,7 @@ class Command(BaseCommand):
             priority=policy['priority'],
             throughput=policy['throughput'],
             test_mode='GAMES' if acceptance_pair else 'SPRT',
-            max_games=2 if acceptance_pair else 0,
+            max_games=game_budget,
             elolower=policy['elo_lower'],
             eloupper=policy['elo_upper'],
             alpha=policy['alpha'],

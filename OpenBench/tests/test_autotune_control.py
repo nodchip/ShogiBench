@@ -32,7 +32,11 @@ OPENBENCH_CONFIG = {
 }
 
 
-@override_settings(AUTOTUNE_USERNAME='autotune', AUTOTUNE_RATING_POLICIES={'acceptance': POLICY})
+@override_settings(
+    AUTOTUNE_USERNAME='autotune',
+    AUTOTUNE_RATING_POLICIES={'acceptance': POLICY},
+    AUTOTUNE_RATING_GAME_BUDGETS={'acceptance': 2},
+)
 class AutotuneControlTests(TestCase):
 
     def setUp(self):
@@ -82,6 +86,7 @@ class AutotuneControlTests(TestCase):
             'rule_profile_id': self.rule.profile_id,
             'stage': 'acceptance',
             'policy': POLICY,
+            'game_budget': 2,
             'opening': OPENING,
             'dev': side,
             'base': side,
@@ -200,6 +205,29 @@ class AutotuneControlTests(TestCase):
             call_command('autotune_control', 'create', stdout=stdout)
 
         self.assertEqual(json.loads(stdout.getvalue())['error'], 'rating_policy_mismatch')
+        self.assertEqual(Test.objects.count(), 0)
+
+    def test_rejects_game_budget_mismatch_without_creating_test(self):
+        payload = self._create_payload()
+        payload['game_budget'] = 4
+        stdout = io.StringIO()
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps({
+            'schema_version': 1,
+            'action': 'create',
+            **payload,
+        }).encode('utf-8')))
+
+        with (
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_control.OPENBENCH_CONFIG',
+                OPENBENCH_CONFIG,
+            ),
+            self.assertRaises(CommandError),
+        ):
+            call_command('autotune_control', 'create', stdout=stdout)
+
+        self.assertEqual(json.loads(stdout.getvalue())['error'], 'rating_budget_mismatch')
         self.assertEqual(Test.objects.count(), 0)
 
     def test_rejects_engine_rule_mismatch(self):
