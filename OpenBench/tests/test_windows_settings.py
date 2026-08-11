@@ -11,6 +11,14 @@ from django.test import SimpleTestCase
 
 class WindowsSettingsTests(SimpleTestCase):
 
+    def test_source_default_signing_key_is_explicitly_non_secret(self):
+        from OpenSite import settings
+
+        self.assertEqual(
+            settings.SECRET_KEY,
+            'insecure-development-only-not-a-deployment-secret',
+        )
+
     def test_windows_settings_are_non_debug_http_and_file_backed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

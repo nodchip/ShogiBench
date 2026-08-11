@@ -22,6 +22,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '@!zw2l8til1(0eb_nk+1w!(n78gqm&u)s)_v7#k6iseia@g9q0'
 DEBUG = True
 
+# This module is development/test-only. Production uses settings_windows and a
+# protected machine-local signing key. Keep this active fallback visibly non-secret.
+SECRET_KEY = 'insecure-development-only-not-a-deployment-secret'
+
 ALLOWED_HOSTS = [
     'kishibe.dyndns.tv',
     'bench.kishibe.dyndns.tv',
