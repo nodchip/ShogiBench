@@ -111,6 +111,7 @@ class AutotuneControlTests(TestCase):
         self.assertEqual(observed['opening'], OPENING)
         self.assertEqual(observed['dev'], self._create_payload()['dev'])
         self.assertEqual(observed['base'], self._create_payload()['base'])
+        self.assertIsNone(observed['terminal_reason'])
         self.assertEqual(observed['statistics']['games'], 0)
         self.assertEqual(observed['statistics']['penta'], [0, 0, 0, 0, 0])
 
@@ -118,6 +119,25 @@ class AutotuneControlTests(TestCase):
             'stop', {'test_id': test.id, 'reason': 'external_game_budget'},
         )
         self.assertEqual(stopped['status'], 'stopped')
+
+    def test_get_classifies_worker_bench_error_without_returning_raw_summary(self):
+        created = self._request('create', self._create_payload())
+        test = Test.objects.get(pk=created['test_id'])
+        test.finished = True
+        test.save(update_fields=('finished', 'updated'))
+        raw_summary = '[tanuki] Wrong Bench: 123456'
+        LogEvent.objects.create(
+            author='worker',
+            summary=raw_summary,
+            log_file='',
+            machine_id=7,
+            test_id=test.id,
+        )
+
+        observed = self._request('get', {'test_id': test.id})
+
+        self.assertEqual(observed['terminal_reason'], 'worker_wrong_bench')
+        self.assertNotIn(raw_summary, json.dumps(observed))
 
     def test_explicit_operator_abort_is_a_distinct_owned_stop_reason(self):
         created = self._request('create', self._create_payload())

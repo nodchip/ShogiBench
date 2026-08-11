@@ -42,6 +42,33 @@ def _response(action, status, **values):
     }
 
 
+def _terminal_reason(test):
+    if not test.finished:
+        return None
+    if test.passed:
+        return 'native_pass'
+    if test.failed:
+        return 'native_fail'
+    events = LogEvent.objects.filter(test_id=test.id).order_by('-id')[:16]
+    for event in events:
+        if event.summary == 'AUTOTUNE_BUDGET_STOP':
+            return 'external_game_budget'
+        if event.summary == 'AUTOTUNE_OPERATOR_ABORT':
+            return 'operator_explicit_abort'
+        if event.machine_id:
+            summary = event.summary.lower()
+            if 'wrong bench' in summary:
+                return 'worker_wrong_bench'
+            if 'non-deterministic benches' in summary:
+                return 'worker_nondeterministic_bench'
+            if 'bench exceeded max duration' in summary:
+                return 'worker_bench_timeout'
+            if 'failed to execute benchmark' in summary:
+                return 'worker_bench_execution_failed'
+            return 'worker_error'
+    return 'external_or_unknown_terminal'
+
+
 def _policy_from_test(test):
     return {
         'alpha': test.alpha,
@@ -104,6 +131,7 @@ def _observation(test, stage=None):
         'test_mode': test.test_mode,
         'max_games': test.max_games,
         'state': _state(test),
+        'terminal_reason': _terminal_reason(test),
         'statistics': {
             'games': test.games,
             'wins': test.wins,
