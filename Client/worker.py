@@ -1322,7 +1322,9 @@ def safe_download_engine(config, branch, net_path):
     build = config.workload['test'][branch]['build']
     external_network = build.get('network') is not None
     binary_net_path = None if external_network else net_path
-    bin_name = utils.engine_binary_name(engine, commit_sha, binary_net_path, private)
+    bin_name = utils.engine_binary_name(
+        engine, commit_sha, binary_net_path, private, build,
+    )
     out_path = os.path.join('Engines', bin_name)
 
     if private:

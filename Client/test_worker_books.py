@@ -149,6 +149,35 @@ class WorkerBookTests(unittest.TestCase):
         ])
         self.assertFalse(any(item.startswith("EVALFILE=") for item in command))
 
+    def test_public_binary_cache_identity_includes_recipe_but_not_network_bytes(self):
+        build = {
+            "path": "source",
+            "command": {
+                "jobs": 64,
+                "target": "normal",
+                "arguments": ["TARGET_CPU=AVX2", "EVAL_EMBEDDING=OFF"],
+            },
+            "network": {
+                "mode": "external_directory",
+                "option": "EvalDir",
+                "filename": "nn.bin",
+            },
+        }
+        canonical = worker.utils.engine_binary_name(
+            "tanuki-", "fca519e70db42a0882213dcc279caf962fe85774", None, False, build,
+        )
+        same_recipe = worker.utils.engine_binary_name(
+            "tanuki-", "fca519e70db42a0882213dcc279caf962fe85774", None, False, build,
+        )
+        changed = {**build, "command": {**build["command"], "jobs": 32}}
+        changed_recipe = worker.utils.engine_binary_name(
+            "tanuki-", "fca519e70db42a0882213dcc279caf962fe85774", None, False, changed,
+        )
+
+        self.assertEqual(canonical, same_recipe)
+        self.assertRegex(canonical, r"^tanuki--FCA519E7-B[0-9A-F]{8}$")
+        self.assertNotEqual(canonical, changed_recipe)
+
     def test_public_external_network_is_sent_to_bench_over_stdin(self):
         captured = {}
 

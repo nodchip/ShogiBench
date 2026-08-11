@@ -21,6 +21,7 @@
 import argparse
 import codecs_util
 import hashlib
+import json
 import os
 import platform
 import requests
@@ -154,10 +155,13 @@ def read_git_credentials(engine):
     raise OpenBenchMissingAPICredentialsException('%s not found' % fname)
 
 
-def engine_binary_name(engine, commit_sha, net_path, private):
+def engine_binary_name(engine, commit_sha, net_path, private, build=None):
     name = '%s-%s' % (engine, commit_sha.upper()[:8])
     if net_path and not private:
         name += '-%s' % (net_path[-8:])
+    if build and not private:
+        payload = json.dumps(build, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        name += '-B%s' % hashlib.sha256(payload).hexdigest().upper()[:8]
     return name
 
 def check_for_engine_binary(out_path):
