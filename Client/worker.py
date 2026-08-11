@@ -1386,6 +1386,7 @@ def safe_run_benchmarks(config, branch, engine, network):
     binary   = os.path.join('Engines', engine)
     network_config = config.workload['test'][branch]['build'].get('network')
     network_option = network_config['option'] if network_config else None
+    benchmark_options = config.workload['test'][branch]['build'].get('benchmark_options')
 
     for attempt in range(2):
         try:
@@ -1393,12 +1394,14 @@ def safe_run_benchmarks(config, branch, engine, network):
             bench.run_benchmark(
                 binary, network, private, 1, 1, expected,
                 network_option=network_option,
+                benchmark_options=benchmark_options,
             )
 
             print('\nRunning %dx Benchmarks for %s' % (config.threads, name))
             speed, nodes = bench.run_benchmark(
                 binary, network, private, config.threads, 1, expected,
                 network_option=network_option,
+                benchmark_options=benchmark_options,
             )
             break
 

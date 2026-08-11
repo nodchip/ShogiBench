@@ -139,6 +139,7 @@ def verify_engine_build(engine_name, conf):
         assert all(type(x) == str for x in conf['build']['compilers'])
         command = conf['build'].get('command')
         network = conf['build'].get('network')
+        benchmark_options = conf['build'].get('benchmark_options')
         if command is not None:
             assert set(command) == {'jobs', 'target', 'arguments'}
             assert type(command['jobs']) == int and 1 <= command['jobs'] <= 256
@@ -152,6 +153,13 @@ def verify_engine_build(engine_name, conf):
             assert type(network['filename']) == str and network['filename']
             assert os.path.basename(network['filename']) == network['filename']
             assert network['filename'] not in ('.', '..')
+        if benchmark_options is not None:
+            assert type(benchmark_options) == dict and 1 <= len(benchmark_options) <= 16
+            assert all(
+                type(name) == str and name and len(name) <= 64
+                and type(value) == str and value and len(value) <= 256
+                for name, value in benchmark_options.items()
+            )
 
 def verify_engine_test_preset(test_preset):
 

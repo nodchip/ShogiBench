@@ -22,6 +22,9 @@
             "mode"     : "external_directory",
             "option"   : "EvalDir",
             "filename" : "nn.bin"
+        },
+        "benchmark_options" : {
+            "PvInterval" : "100000000"
         }
     },
 

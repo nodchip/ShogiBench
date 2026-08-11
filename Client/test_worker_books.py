@@ -192,12 +192,43 @@ class WorkerBookTests(unittest.TestCase):
 
         with patch.object(worker.bench.subprocess, "Popen", return_value=Process()):
             worker.bench.single_core_bench(
-                "engine.exe", "Networks/ABCDEF12.eval", False, "EvalDir", Queue(),
+                "engine.exe", "Networks/ABCDEF12.eval", False, "EvalDir", None, Queue(),
             )
 
         self.assertEqual(
             captured["input"],
             b"setoption name EvalDir value Networks/ABCDEF12.eval\nbench\nquit\n",
+        )
+        self.assertEqual(captured["value"], (472847, 1000))
+
+    def test_public_bench_forces_canonical_pv_interval_after_evaldir(self):
+        captured = {}
+
+        class Process:
+            def communicate(self, *, input):
+                captured["input"] = input
+                return b"Nodes searched : 472847\nNodes/second : 1000\n", None
+
+        class Queue:
+            def put(self, value):
+                captured["value"] = value
+
+        with patch.object(worker.bench.subprocess, "Popen", return_value=Process()):
+            worker.bench.single_core_bench(
+                "engine.exe",
+                "Networks/ABCDEF12.eval",
+                False,
+                "EvalDir",
+                {"PvInterval": "100000000"},
+                Queue(),
+            )
+
+        self.assertEqual(
+            captured["input"],
+            (
+                b"setoption name EvalDir value Networks/ABCDEF12.eval\n"
+                b"setoption name PvInterval value 100000000\nbench\nquit\n"
+            ),
         )
         self.assertEqual(captured["value"], (472847, 1000))
 
@@ -295,6 +326,7 @@ class WorkerBookTests(unittest.TestCase):
         config = self.make_benchmark_config()
         config.workload["test"]["dev"]["build"] = {
             "network": {"option": "EvalDir"},
+            "benchmark_options": {"PvInterval": "100000000"},
         }
 
         with patch.object(
@@ -309,6 +341,10 @@ class WorkerBookTests(unittest.TestCase):
         )
         self.assertEqual(
             run_benchmark.call_args_list[1].kwargs["network_option"], "EvalDir",
+        )
+        self.assertEqual(
+            run_benchmark.call_args_list[0].kwargs["benchmark_options"],
+            {"PvInterval": "100000000"},
         )
 
     def test_safe_run_benchmarks_retries_timeout_once_with_warmup(self):

@@ -68,19 +68,26 @@ def parse_stream_output(stream):
     bench = int(re.search(r'\d+', bench).group()) if bench else None
     return (bench, nps)
 
-def single_core_bench(binary, network, private, network_option, outqueue):
+def single_core_bench(
+    binary, network, private, network_option, benchmark_options, outqueue,
+):
 
     # Basic command for Public engines
     cmd = ['./%s' % (binary)]
     # やねうら王 9.10 で、コマンドライン引数で指定した USI オプションが実行されないため、
     # 標準入力から入力する。
-    input = "\n".join(['bench', 'quit']) + "\n"
+    options = []
 
     # Configure private-network files or declared public external-network directories.
     if network and (private or network_option):
         option = 'setoption name %s value %s' % (network_option or 'EvalFile', network)
         cmd = ['./%s' % (binary)]
-        input = "\n".join([option, 'bench', 'quit']) + "\n"
+        options.append(option)
+
+    for name, value in sorted((benchmark_options or {}).items()):
+        options.append('setoption name %s value %s' % (name, value))
+
+    input = "\n".join(options + ['bench', 'quit']) + "\n"
 
     input = input.encode('utf-8')
     try: # Launch the bench and wait for results
@@ -92,14 +99,18 @@ def single_core_bench(binary, network, private, network_option, outqueue):
     except: # Signal an error with (None, None)
         outqueue.put((None, None))
 
-def multi_core_bench(binary, network, private, threads, network_option=None):
+def multi_core_bench(
+    binary, network, private, threads, network_option=None, benchmark_options=None,
+):
 
     outqueue = multiprocessing.Queue()
 
     processes = [
         multiprocessing.Process(
             target=single_core_bench,
-            args=(binary, network, private, network_option, outqueue))
+            args=(
+                binary, network, private, network_option, benchmark_options, outqueue,
+            ))
         for ii in range(threads)
     ]
 
@@ -119,6 +130,7 @@ def multi_core_bench(binary, network, private, threads, network_option=None):
 
 def run_benchmark(
     binary, network, private, threads, sets, expected=None, network_option=None,
+    benchmark_options=None,
 ):
 
     engine = os.path.basename(binary)
@@ -126,7 +138,7 @@ def run_benchmark(
     benches, speeds = [], []
     for ii in range(sets):
         for bench, speed in multi_core_bench(
-            binary, network, private, threads, network_option,
+            binary, network, private, threads, network_option, benchmark_options,
         ):
             benches.append(bench); speeds.append(speed)
 
