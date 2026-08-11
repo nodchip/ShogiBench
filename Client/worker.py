@@ -1286,7 +1286,7 @@ def safe_download_network_weights(config, branch):
             raise utils.OpenBenchCorruptedNetworkException(
                 'Invalid external network staging for %s' % net_name,
             ) from None
-        return runtime_dir
+        return os.path.abspath(runtime_dir)
 
     return net_path
 

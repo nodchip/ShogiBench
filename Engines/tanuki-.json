@@ -21,7 +21,8 @@
         "network" : {
             "mode"     : "external_directory",
             "option"   : "EvalDir",
-            "filename" : "nn.bin"
+            "filename" : "nn.bin",
+            "candidate_bench_policy" : "determinism_only"
         },
         "benchmark_options" : {
             "PvInterval" : "100000000"

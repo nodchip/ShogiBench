@@ -35,6 +35,22 @@ from OpenBench.models import Result, Test
 
 from django.db import transaction
 
+
+def branch_bench(test, branch):
+
+    engine_name = getattr(test, '%s_engine' % branch)
+    network_sha = getattr(test, '%s_network' % branch)
+    build = OPENBENCH_CONFIG['engines'][engine_name]['build']
+    network = build.get('network')
+    if (
+        branch == 'dev'
+        and network_sha
+        and network
+        and network.get('candidate_bench_policy') == 'determinism_only'
+    ):
+        return 0
+    return getattr(test, branch).bench
+
 def get_workload(request, machine):
 
     # Select a workload from the possible ones, if we can
@@ -224,7 +240,7 @@ def workload_to_dictionary(test, result, machine):
         'name'         : test.dev.name,
         'source'       : test.dev.source,
         'sha'          : test.dev.sha,
-        'bench'        : test.dev.bench,
+        'bench'        : branch_bench(test, 'dev'),
         'engine'       : test.dev_engine,
         'options'      : test.dev_options,
         'network'      : test.dev_network,
@@ -241,7 +257,7 @@ def workload_to_dictionary(test, result, machine):
         'name'         : test.base.name,
         'source'       : test.base.source,
         'sha'          : test.base.sha,
-        'bench'        : test.base.bench,
+        'bench'        : branch_bench(test, 'base'),
         'engine'       : test.base_engine,
         'options'      : test.base_options,
         'network'      : test.base_network,

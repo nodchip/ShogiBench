@@ -39,7 +39,7 @@ class WorkloadPayloadBookTests(TestCase):
             dev_repo="https://github.com/example/dev",
             dev_engine="tanuki-",
             dev_options="Threads=1 Hash=16",
-            dev_network="",
+            dev_network="ABCDEF12",
             dev_time_control="8.0+0.08",
             dev_book_sha="ABCDEF12",
             dev_book_name="dev-book.db",
@@ -47,7 +47,7 @@ class WorkloadPayloadBookTests(TestCase):
             base_repo="https://github.com/example/base",
             base_engine="tanuki-",
             base_options="Threads=1 Hash=16",
-            base_network="",
+            base_network="12345678",
             base_time_control="8.0+0.08",
             base_book_sha="12345678",
             base_book_name="base-book.db",
@@ -79,6 +79,8 @@ class WorkloadPayloadBookTests(TestCase):
         self.assertEqual(workload["test"]["dev"]["book_name"], "dev-book.db")
         self.assertEqual(workload["test"]["base"]["book"], "12345678")
         self.assertEqual(workload["test"]["base"]["book_name"], "base-book.db")
+        self.assertEqual(workload["test"]["dev"]["bench"], 0)
+        self.assertEqual(workload["test"]["base"]["bench"], 222)
         self.assertEqual(
             workload["test"]["rule_profile_id"],
             "canonical-yaneuraou-csarule24-v1",

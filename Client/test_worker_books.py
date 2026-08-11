@@ -263,6 +263,7 @@ class WorkerBookTests(unittest.TestCase):
 
                 source = Path("Networks", "ABCDEF12")
                 staged = Path(runtime, "nn.bin")
+                self.assertTrue(Path(runtime).is_absolute())
                 self.assertTrue(os.path.samefile(source, staged))
             finally:
                 os.chdir(previous)
