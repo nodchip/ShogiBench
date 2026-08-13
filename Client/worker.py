@@ -278,6 +278,7 @@ class ServerReporter:
     def report_nps(config, dev_nps, base_nps):
 
         payload = {
+            'test_id'  : config.workload['test']['id'],
             'nps'      : (dev_nps + base_nps) // 2,
             'dev_nps'  : int(dev_nps),
             'base_nps' : int(base_nps),
@@ -1411,12 +1412,32 @@ def safe_run_benchmarks(config, branch, engine, network):
                 print('\nBench exceeded max duration for %s; retrying once' % (name))
                 continue
 
-            ServerReporter.report_bad_bench(config, error.message)
+            quarantine_bad_bench_workload(config, error.message)
             raise
+
+        except Exception as error:
+            message = '[%s] Failed to Execute Benchmark' % (os.path.basename(binary))
+            quarantine_bad_bench_workload(config, message)
+            raise utils.OpenBenchBadBenchException(message) from error
 
     print('Bench for %s is %d' % (name, nodes))
     print('Speed for %s is %d' % (name, speed))
     return speed
+
+
+def quarantine_bad_bench_workload(config, message):
+
+    # A malformed bench result must not make this worker request the same workload
+    # forever. The server report durably finishes the test; the in-memory blacklist
+    # remains the fail-closed fallback when that report itself is unavailable.
+    test_id = config.workload['test']['id']
+    if test_id not in config.blacklist:
+        config.blacklist.append(test_id)
+
+    try:
+        ServerReporter.report_bad_bench(config, message)
+    except Exception:
+        print('[Note] Bad benchmark report failed; workload remains quarantined locally')
 
 
 def build_runner_command(config, dev_cmd, base_cmd, scale_factor, timestamp, runner_idx):

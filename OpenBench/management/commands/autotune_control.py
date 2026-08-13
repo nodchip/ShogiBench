@@ -95,6 +95,19 @@ def _terminal_outcome(test):
     return 'external_or_unknown_terminal', None
 
 
+def _startup_state(test):
+    if test.games > 0:
+        return {'phase': 'games_started', 'ready': True}
+    validated = LogEvent.objects.filter(
+        test_id=test.id,
+        machine_id__gt=0,
+        summary='AUTOTUNE_BENCH_VALIDATED',
+    ).exists()
+    if validated:
+        return {'phase': 'bench_validated', 'ready': True}
+    return {'phase': 'workload_pending', 'ready': False}
+
+
 def _policy_from_test(test):
     return {
         'alpha': test.alpha,
@@ -162,6 +175,7 @@ def _observation(test, stage=None):
         'test_mode': test.test_mode,
         'max_games': test.max_games,
         'state': _state(test),
+        'startup': _startup_state(test),
         'terminal_reason': terminal_reason,
         'terminal_diagnostic': terminal_diagnostic,
         'statistics': {

@@ -785,6 +785,20 @@ def client_submit_nps(request, machine):
     machine.base_mnps = float(request.POST['base_nps']) / 1e6;
     machine.save()
 
+    # Both engine benchmarks have passed strict client-side parsing by this point.
+    # Persist only a bounded phase marker so the local autotune control adapter can
+    # prove startup health without exposing or polling raw worker output.
+    test_id = int(request.POST.get('test_id', 0))
+    test = Test.objects.filter(id=test_id).first()
+    if test is not None and test_id == machine.workload and not test.finished:
+        LogEvent.objects.get_or_create(
+            author=machine.user.username,
+            summary='AUTOTUNE_BENCH_VALIDATED',
+            log_file='',
+            machine_id=machine.id,
+            test_id=test_id,
+        )
+
     # Pass back an empty JSON response
     return JsonResponse({})
 

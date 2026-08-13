@@ -42,6 +42,7 @@ class WorkerBookTests(unittest.TestCase):
     def make_benchmark_config(self):
         return types.SimpleNamespace(
             threads=64,
+            blacklist=[],
             workload={
                 "test": {
                     "id": 1,
@@ -383,6 +384,50 @@ class WorkerBookTests(unittest.TestCase):
 
         self.assertEqual(run_benchmark.call_count, 2)
         report_bad_bench.assert_called_once_with(config, "[engine.exe] Wrong Bench: 456")
+        self.assertEqual(config.blacklist, [1])
+
+    def test_safe_run_benchmarks_quarantines_unexpected_output_failure(self):
+        config = self.make_benchmark_config()
+
+        with patch.object(
+            worker.bench, "run_benchmark", side_effect=ValueError("unparseable output"),
+        ):
+            with patch.object(worker.ServerReporter, "report_bad_bench") as report_bad_bench:
+                with self.assertRaisesRegex(
+                    worker.utils.OpenBenchBadBenchException,
+                    "Failed to Execute Benchmark",
+                ):
+                    worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
+
+        report_bad_bench.assert_called_once_with(
+            config, "[engine.exe] Failed to Execute Benchmark",
+        )
+        self.assertEqual(config.blacklist, [1])
+
+    def test_bad_bench_report_failure_keeps_local_quarantine(self):
+        config = self.make_benchmark_config()
+        wrong_bench = worker.utils.OpenBenchBadBenchException(
+            "[engine.exe] Wrong Bench: 456"
+        )
+
+        with patch.object(worker.bench, "run_benchmark", side_effect=wrong_bench):
+            with patch.object(
+                worker.ServerReporter,
+                "report_bad_bench",
+                side_effect=OSError("server unavailable"),
+            ):
+                with self.assertRaises(worker.utils.OpenBenchBadBenchException):
+                    worker.safe_run_benchmarks(config, "dev", "engine.exe", None)
+
+        self.assertEqual(config.blacklist, [1])
+
+    def test_report_nps_includes_owned_test_id(self):
+        config = self.make_benchmark_config()
+        with patch.object(worker.ServerReporter, "report") as report:
+            worker.ServerReporter.report_nps(config, 100, 200)
+
+        self.assertEqual(report.call_args.args[1], "clientSubmitNPS")
+        self.assertEqual(report.call_args.args[2]["test_id"], 1)
 
 
 if __name__ == "__main__":

@@ -117,6 +117,10 @@ class AutotuneControlTests(TestCase):
         self.assertEqual(observed['dev'], self._create_payload()['dev'])
         self.assertEqual(observed['base'], self._create_payload()['base'])
         self.assertIsNone(observed['terminal_reason'])
+        self.assertEqual(observed['startup'], {
+            'phase': 'workload_pending',
+            'ready': False,
+        })
         self.assertEqual(observed['statistics']['games'], 0)
         self.assertEqual(observed['statistics']['penta'], [0, 0, 0, 0, 0])
 
@@ -124,6 +128,24 @@ class AutotuneControlTests(TestCase):
             'stop', {'test_id': test.id, 'reason': 'external_game_budget'},
         )
         self.assertEqual(stopped['status'], 'stopped')
+
+    def test_get_reports_bounded_bench_validated_startup(self):
+        created = self._request('create', self._create_payload())
+        test = Test.objects.get(pk=created['test_id'])
+        LogEvent.objects.create(
+            author='worker',
+            summary='AUTOTUNE_BENCH_VALIDATED',
+            log_file='',
+            machine_id=7,
+            test_id=test.id,
+        )
+
+        observed = self._request('get', {'test_id': test.id})
+
+        self.assertEqual(observed['startup'], {
+            'phase': 'bench_validated',
+            'ready': True,
+        })
 
     def test_get_classifies_worker_bench_error_without_returning_raw_summary(self):
         created = self._request('create', self._create_payload())
