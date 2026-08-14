@@ -43,10 +43,9 @@ def branch_bench(test, branch):
     build = OPENBENCH_CONFIG['engines'][engine_name]['build']
     network = build.get('network')
     if (
-        branch == 'dev'
-        and network_sha
+        network_sha
         and network
-        and network.get('candidate_bench_policy') == 'determinism_only'
+        and network.get('bench_policy') == 'determinism_only'
     ):
         return 0
     return getattr(test, branch).bench

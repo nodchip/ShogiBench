@@ -80,7 +80,7 @@ class WorkloadPayloadBookTests(TestCase):
         self.assertEqual(workload["test"]["base"]["book"], "12345678")
         self.assertEqual(workload["test"]["base"]["book_name"], "base-book.db")
         self.assertEqual(workload["test"]["dev"]["bench"], 0)
-        self.assertEqual(workload["test"]["base"]["bench"], 222)
+        self.assertEqual(workload["test"]["base"]["bench"], 0)
         self.assertEqual(
             workload["test"]["rule_profile_id"],
             "canonical-yaneuraou-csarule24-v1",

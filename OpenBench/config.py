@@ -148,10 +148,10 @@ def verify_engine_build(engine_name, conf):
             assert all(type(x) == str and x for x in command['arguments'])
         if network is not None:
             assert set(network) == {
-                'mode', 'option', 'filename', 'candidate_bench_policy',
+                'mode', 'option', 'filename', 'bench_policy',
             }
             assert network['mode'] == 'external_directory'
-            assert network['candidate_bench_policy'] == 'determinism_only'
+            assert network['bench_policy'] == 'determinism_only'
             assert type(network['option']) == str and network['option']
             assert type(network['filename']) == str and network['filename']
             assert os.path.basename(network['filename']) == network['filename']
