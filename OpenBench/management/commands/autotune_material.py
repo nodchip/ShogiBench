@@ -152,11 +152,16 @@ class Command(BaseCommand):
         return size
 
     @staticmethod
-    def _network(network_sha256):
+    def _network(network_sha256, allow_duplicate=False):
         if not Engine.objects.filter(name=ENGINE).exists():
             raise MaterialError('engine_missing')
-        networks = list(Network.objects.filter(engine=ENGINE, sha256__iexact=network_sha256[:8]))
-        if len(networks) != 1:
+        networks = list(
+            Network.objects.filter(
+                engine=ENGINE,
+                sha256__iexact=network_sha256[:8],
+            ).order_by('id')
+        )
+        if not networks or (len(networks) != 1 and not allow_duplicate):
             raise MaterialError('network_not_unique')
         return networks[0]
 
@@ -229,7 +234,10 @@ class Command(BaseCommand):
         }
 
     def _inspect(self, request):
-        network = self._network(request['network_sha256'])
+        network = self._network(
+            request['network_sha256'],
+            allow_duplicate=request['schema_version'] == 2,
+        )
         opening = self._opening(request['opening_name'], request['opening_sha256'])
         root = self._media_root()
         network_size = self._inspect_file(

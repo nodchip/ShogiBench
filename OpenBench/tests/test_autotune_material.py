@@ -139,6 +139,59 @@ class AutotuneMaterialTests(TestCase):
             'bench': 123456,
         })
 
+    def test_inspect_v2_treats_duplicate_rows_for_the_same_network_id_as_one_material(self):
+        Network.objects.create(
+            default=False,
+            sha256=self.network.sha256,
+            name='duplicate-row-for-same-material',
+            engine='tanuki-',
+            author='legacy-import',
+        )
+
+        result = self._call({
+            'schema_version': 2,
+            'action': 'inspect',
+            'engine': 'tanuki-',
+            'network_sha256': self.network_hash,
+            'opening_name': self.opening_name,
+            'opening_sha256': self.opening_hash,
+        }, action='inspect')
+
+        self.assertEqual(result['status'], 'observed')
+        self.assertEqual(result['network']['id'], self.network.sha256)
+
+    def test_inspect_v1_keeps_duplicate_network_rows_fail_closed(self):
+        Network.objects.create(
+            default=False,
+            sha256=self.network.sha256,
+            name='duplicate-row-for-same-material',
+            engine='tanuki-',
+            author='legacy-import',
+        )
+        payload = {
+            'schema_version': 1,
+            'action': 'inspect',
+            'engine': 'tanuki-',
+            'network_sha256': self.network_hash,
+            'opening_name': self.opening_name,
+            'opening_sha256': self.opening_hash,
+        }
+        stdout = io.StringIO()
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode('utf-8')))
+
+        with (
+            override_settings(MEDIA_ROOT=str(self.media.resolve())),
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_material.OPENBENCH_CONFIG',
+                self.openbench_config,
+            ),
+            self.assertRaises(CommandError),
+        ):
+            call_command('autotune_material', 'inspect', stdout=stdout)
+
+        self.assertEqual(json.loads(stdout.getvalue())['error'], 'network_not_unique')
+
     def test_inspect_rejects_hash_mismatch_without_listing_or_mutation(self):
         stdout = io.StringIO()
         payload = {
