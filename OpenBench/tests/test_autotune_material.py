@@ -30,8 +30,13 @@ class AutotuneMaterialTests(TestCase):
                 },
             },
         }
+        self.engine_commit = 'b' * 40
+        self.engine_repository = 'https://github.com/example/public-engine'
         Engine.objects.create(
-            name='tanuki-', source='https://example.invalid/source', sha='b' * 64, bench=1,
+            name='tanuki-',
+            source=f'{self.engine_repository}/archive/{self.engine_commit}.zip',
+            sha=self.engine_commit,
+            bench=123456,
         )
         self.network = Network.objects.create(
             default=True,
@@ -115,6 +120,24 @@ class AutotuneMaterialTests(TestCase):
         self.assertEqual(result['opening']['name'], self.opening_name)
         self.assertEqual(result['opening']['sha256'], self.opening_hash)
         self.assertEqual(result['opening']['source'], self.opening_source)
+
+    def test_inspect_v2_returns_exact_engine_source_identity(self):
+        result = self._call({
+            'schema_version': 2,
+            'action': 'inspect',
+            'engine': 'tanuki-',
+            'network_sha256': self.network_hash,
+            'opening_name': self.opening_name,
+            'opening_sha256': self.opening_hash,
+        }, action='inspect')
+
+        self.assertEqual(result['schema_version'], 2)
+        self.assertEqual(result['engine_source'], {
+            'name': 'tanuki-',
+            'repository': self.engine_repository,
+            'commit_sha': self.engine_commit,
+            'bench': 123456,
+        })
 
     def test_inspect_rejects_hash_mismatch_without_listing_or_mutation(self):
         stdout = io.StringIO()

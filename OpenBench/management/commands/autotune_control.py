@@ -15,6 +15,7 @@ from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonic
 MAX_REQUEST_BYTES = 65536
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
 WRONG_BENCH = re.compile(r'wrong bench:\s*(\d{1,19})\s*$', re.IGNORECASE)
+GIT_SHA = re.compile(r'^[0-9a-f]{40}$')
 
 
 class ControlError(Exception):
@@ -38,9 +39,9 @@ def _state(test):
     }
 
 
-def _response(action, status, **values):
+def _response(schema_version, action, status, **values):
     return {
-        'schema_version': 1,
+        'schema_version': schema_version,
         'action': action,
         'status': status,
         **values,
@@ -123,13 +124,24 @@ def _policy_from_test(test):
     }
 
 
-def _side_from_test(test, prefix):
-    return {
+def _side_from_test(test, prefix, schema_version):
+    side = {
         'engine': getattr(test, f'{prefix}_engine'),
         'repo': getattr(test, f'{prefix}_repo'),
         'options': getattr(test, f'{prefix}_options'),
         'network': getattr(test, f'{prefix}_network'),
     }
+    if schema_version == 2:
+        engine = getattr(test, prefix)
+        expected_url = side['repo'].rstrip('/') + '/archive/' + engine.sha + '.zip'
+        if not GIT_SHA.fullmatch(engine.sha) or engine.source != expected_url:
+            raise ControlError('test_engine_source_not_reconcilable')
+        side['source'] = {
+            'name': engine.name,
+            'commit_sha': engine.sha,
+            'bench': engine.bench,
+        }
+    return side
 
 
 def _opening_from_test(test):
@@ -162,7 +174,7 @@ def _stage_from_test(test):
     return matches[0]
 
 
-def _observation(test, stage=None):
+def _observation(test, stage=None, schema_version=1):
     terminal_reason, terminal_diagnostic = _terminal_outcome(test)
     return {
         'test_id': test.id,
@@ -170,8 +182,8 @@ def _observation(test, stage=None):
         'stage': stage or _stage_from_test(test),
         'policy': _policy_from_test(test),
         'opening': _opening_from_test(test),
-        'dev': _side_from_test(test, 'dev'),
-        'base': _side_from_test(test, 'base'),
+        'dev': _side_from_test(test, 'dev', schema_version),
+        'base': _side_from_test(test, 'base', schema_version),
         'test_mode': test.test_mode,
         'max_games': test.max_games,
         'state': _state(test),
@@ -203,8 +215,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         action = options['action']
+        schema_version = 1
         try:
             request = self._read_request(action)
+            schema_version = request['schema_version']
             if action == 'create':
                 result = self._create(request)
             elif action == 'get':
@@ -213,7 +227,7 @@ class Command(BaseCommand):
                 result = self._stop(request)
         except ControlError as error:
             self.stdout.write(json.dumps(
-                _response(action, 'rejected', error=error.code),
+                _response(schema_version, action, 'rejected', error=error.code),
                 sort_keys=True,
                 separators=(',', ':'),
             ))
@@ -230,7 +244,7 @@ class Command(BaseCommand):
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise ControlError('invalid_json') from None
         _exact_object(request, self._request_fields(action), 'invalid_request_shape')
-        if request['schema_version'] != 1 or request['action'] != action:
+        if request['schema_version'] not in (1, 2) or request['action'] != action:
             raise ControlError('invalid_request_identity')
         return request
 
@@ -306,20 +320,67 @@ class Command(BaseCommand):
         return expected
 
     @staticmethod
-    def _side(value):
+    def _source(value, repo):
+        source = _exact_object(
+            value,
+            ('name', 'commit_sha', 'bench'),
+            'invalid_engine_source_shape',
+        )
+        if (
+            not isinstance(source['name'], str)
+            or not source['name']
+            or len(source['name']) > 128
+            or not isinstance(source['commit_sha'], str)
+            or not GIT_SHA.fullmatch(source['commit_sha'])
+            or isinstance(source['bench'], bool)
+            or not isinstance(source['bench'], int)
+            or source['bench'] <= 0
+            or source['bench'] > 2**63 - 1
+        ):
+            raise ControlError('invalid_engine_source_value')
+        expected_url = repo.rstrip('/') + '/archive/' + source['commit_sha'] + '.zip'
+        if not expected_url.startswith('https://github.com/'):
+            raise ControlError('engine_source_url_mismatch')
+        same_name = Engine.objects.filter(name=source['name'])
+        exact = same_name.filter(
+            source=expected_url, sha=source['commit_sha'], bench=source['bench'],
+        )
+        if exact.count() > 1 or (same_name.exists() and not exact.exists()):
+            raise ControlError('engine_source_identity_conflict')
+        if exact.exists():
+            return exact.get()
+        return Engine.objects.create(
+            name=source['name'],
+            source=expected_url,
+            sha=source['commit_sha'],
+            bench=source['bench'],
+        )
+
+    @staticmethod
+    def _side(value, schema_version):
+        fields = ('engine', 'repo', 'options', 'network')
+        if schema_version == 2:
+            fields = (*fields, 'source')
         side = _exact_object(
             value,
-            ('engine', 'repo', 'options', 'network'),
+            fields,
             'invalid_engine_shape',
         )
-        if not all(isinstance(side[name], str) for name in side):
+        if not all(
+            isinstance(side[name], str)
+            for name in ('engine', 'repo', 'options', 'network')
+        ):
             raise ControlError('invalid_engine_value')
         if not options_select_canonical_rule(side['options']):
             raise ControlError('engine_rule_option_mismatch')
         try:
-            engine = Engine.objects.get(name=side['engine'])
             network = Network.objects.get(engine=side['engine'], sha256=side['network'])
-        except (Engine.DoesNotExist, Network.DoesNotExist):
+            engine = (
+                Engine.objects.get(name=side['engine'])
+                if schema_version == 1
+                else Command._source(side['source'], side['repo'])
+            )
+        except (Engine.DoesNotExist, Network.DoesNotExist, Engine.MultipleObjectsReturned):
             raise ControlError('engine_material_missing') from None
         return side, engine, network
 
@@ -353,8 +414,9 @@ class Command(BaseCommand):
         policy = self._policy(request['stage'], request['policy'])
         game_budget = self._game_budget(request['stage'], request['game_budget'])
         opening = self._opening(request['opening'])
-        dev, dev_engine, dev_network = self._side(request['dev'])
-        base, base_engine, base_network = self._side(request['base'])
+        schema_version = request['schema_version']
+        dev, dev_engine, dev_network = self._side(request['dev'], schema_version)
+        base, base_engine, base_network = self._side(request['base'], schema_version)
         acceptance_pair = request['stage'] == 'acceptance'
         if acceptance_pair and (policy['workload_size'] != 1 or game_budget != 2):
             raise ControlError('configured_policy_invalid')
@@ -404,7 +466,12 @@ class Command(BaseCommand):
             log_file='',
             test_id=test.id,
         )
-        return _response('create', 'created', **_observation(test, request['stage']))
+        return _response(
+            schema_version,
+            'create',
+            'created',
+            **_observation(test, request['stage'], schema_version),
+        )
 
     @transaction.atomic
     def _owned_test(self, test_id):
@@ -422,7 +489,13 @@ class Command(BaseCommand):
 
     def _get(self, request):
         test = self._owned_test(request['test_id'])
-        return _response('get', 'observed', **_observation(test))
+        schema_version = request['schema_version']
+        return _response(
+            schema_version,
+            'get',
+            'observed',
+            **_observation(test, schema_version=schema_version),
+        )
 
     @transaction.atomic
     def _stop(self, request):
@@ -444,6 +517,7 @@ class Command(BaseCommand):
             test_id=test.id,
         )
         return _response(
+            request['schema_version'],
             'stop',
             'stopped',
             test_id=test.id,

@@ -58,9 +58,9 @@ class AutotuneControlTests(TestCase):
             author='operator',
         )
 
-    def _request(self, action, payload):
+    def _request(self, action, payload, schema_version=1):
         stdin = io.TextIOWrapper(io.BytesIO(json.dumps({
-            'schema_version': 1,
+            'schema_version': schema_version,
             'action': action,
             **payload,
         }).encode('utf-8')))
@@ -90,6 +90,31 @@ class AutotuneControlTests(TestCase):
             'opening': OPENING,
             'dev': side,
             'base': side,
+        }
+
+    def _source_v2(self, name, commit, bench):
+        repo = 'https://github.com/example/public-engine'
+        return {
+            'engine': self.engine.name,
+            'repo': repo,
+            'source': {
+                'name': name,
+                'commit_sha': commit,
+                'bench': bench,
+            },
+            'options': 'option.EnteringKingRule=CSARule24',
+            'network': '12345678',
+        }
+
+    def _create_payload_v2(self):
+        return {
+            'rule_profile_id': self.rule.profile_id,
+            'stage': 'acceptance',
+            'policy': POLICY,
+            'game_budget': 2,
+            'opening': OPENING,
+            'dev': self._source_v2('dev-source', 'a' * 40, 111),
+            'base': self._source_v2('base-source', 'c' * 40, 222),
         }
 
     def test_create_get_and_budget_stop(self):
@@ -128,6 +153,23 @@ class AutotuneControlTests(TestCase):
             'stop', {'test_id': test.id, 'reason': 'external_game_budget'},
         )
         self.assertEqual(stopped['status'], 'stopped')
+
+    def test_create_v2_binds_distinct_engine_sources_and_round_trips_them(self):
+        payload = self._create_payload_v2()
+        created = self._request('create', payload, schema_version=2)
+
+        self.assertEqual(created['schema_version'], 2)
+        self.assertEqual(created['dev'], payload['dev'])
+        self.assertEqual(created['base'], payload['base'])
+        test = Test.objects.get(pk=created['test_id'])
+        self.assertEqual(test.dev.sha, 'a' * 40)
+        self.assertEqual(test.dev.bench, 111)
+        self.assertEqual(test.base.sha, 'c' * 40)
+        self.assertEqual(test.base.bench, 222)
+
+        observed = self._request('get', {'test_id': test.id}, schema_version=2)
+        self.assertEqual(observed['dev'], payload['dev'])
+        self.assertEqual(observed['base'], payload['base'])
 
     def test_get_reports_bounded_bench_validated_startup(self):
         created = self._request('create', self._create_payload())
@@ -273,6 +315,29 @@ class AutotuneControlTests(TestCase):
             call_command('autotune_control', 'create', stdout=stdout)
 
         self.assertEqual(json.loads(stdout.getvalue())['error'], 'engine_rule_option_mismatch')
+        self.assertEqual(Test.objects.count(), 0)
+
+    def test_v2_rejects_non_github_engine_repository(self):
+        payload = self._create_payload_v2()
+        payload['dev']['repo'] = 'https://example.invalid/public-engine'
+        stdout = io.StringIO()
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps({
+            'schema_version': 2,
+            'action': 'create',
+            **payload,
+        }).encode('utf-8')))
+
+        with (
+            patch('sys.stdin', stdin),
+            patch(
+                'OpenBench.management.commands.autotune_control.OPENBENCH_CONFIG',
+                OPENBENCH_CONFIG,
+            ),
+            self.assertRaises(CommandError),
+        ):
+            call_command('autotune_control', 'create', stdout=stdout)
+
+        self.assertEqual(json.loads(stdout.getvalue())['error'], 'engine_source_url_mismatch')
         self.assertEqual(Test.objects.count(), 0)
 
     def test_rejects_other_users_test(self):

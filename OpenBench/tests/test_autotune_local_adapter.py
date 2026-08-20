@@ -29,12 +29,12 @@ class AutotuneLocalAdapterTests(SimpleTestCase):
         })
 
     @staticmethod
-    def _completed(action, status):
+    def _completed(action, status, schema_version=1):
         return subprocess.CompletedProcess(
             args=[],
             returncode=0,
             stdout=json.dumps({
-                'schema_version': 1,
+                'schema_version': schema_version,
                 'action': action,
                 'status': status,
             }).encode('utf-8'),
@@ -99,6 +99,41 @@ class AutotuneLocalAdapterTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(calls[0][2:4], ('autotune_control', 'get'))
 
+    def test_rating_schema_v2_is_forwarded_and_requires_v2_response(self):
+        calls = []
+        body = b'{"schema_version":2,"action":"get","test_id":7}'
+
+        def runner(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            return self._completed('get', 'observed', schema_version=2)
+
+        with (
+            override_settings(BASE_DIR=self.root.resolve()),
+            self._environment(),
+            patch('OpenBench.autotune_local_adapter.subprocess.run', runner),
+        ):
+            response = Client(REMOTE_ADDR='127.0.0.1').post(
+                '/api/autotune-local/v1/rating/get/',
+                data=body,
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['schema_version'], 2)
+        self.assertEqual(calls[0][1]['input'], body)
+
+    def test_non_rating_target_rejects_schema_v2_without_spawn(self):
+        with patch('OpenBench.autotune_local_adapter.subprocess.run') as runner:
+            response = Client(REMOTE_ADDR='127.0.0.1').post(
+                '/api/autotune-local/v1/network/get/',
+                data=b'{"schema_version":2,"action":"get"}',
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'request_identity_invalid')
+        runner.assert_not_called()
+
     def test_material_get_maps_to_fixed_read_only_command(self):
         calls = []
 
@@ -140,6 +175,29 @@ class AutotuneLocalAdapterTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(calls[0][2:4], ('autotune_material', 'inspect'))
+
+    def test_material_inspect_schema_v2_is_forwarded(self):
+        calls = []
+        body = b'{"schema_version":2,"action":"inspect"}'
+
+        def runner(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            return self._completed('inspect', 'observed', schema_version=2)
+
+        with (
+            override_settings(BASE_DIR=self.root.resolve()),
+            self._environment(),
+            patch('OpenBench.autotune_local_adapter.subprocess.run', runner),
+        ):
+            response = Client(REMOTE_ADDR='127.0.0.1').post(
+                '/api/autotune-local/v1/material/inspect/',
+                data=body,
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['schema_version'], 2)
+        self.assertEqual(calls[0][1]['input'], body)
 
     def test_lan_unknown_action_and_wrong_method_never_spawn(self):
         with patch('OpenBench.autotune_local_adapter.subprocess.run') as runner:

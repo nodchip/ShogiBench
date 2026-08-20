@@ -15,6 +15,7 @@ MAX_MATERIAL_BYTES = 16 * 1024 * 1024 * 1024
 ENGINE = 'tanuki-'
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
+GIT_SHA = re.compile(r'^[0-9a-f]{40}$')
 
 
 class MaterialError(Exception):
@@ -43,7 +44,7 @@ class Command(BaseCommand):
             result = self._get(request) if options['action'] == 'get' else self._inspect(request)
         except MaterialError as error:
             self.stdout.write(json.dumps({
-                'schema_version': 1,
+                'schema_version': locals().get('request', {}).get('schema_version', 1),
                 'action': options['action'],
                 'status': 'rejected',
                 'error': error.code,
@@ -70,7 +71,8 @@ class Command(BaseCommand):
         )
         if not isinstance(request, dict) or set(request) != fields:
             raise MaterialError('invalid_request_shape')
-        if request['schema_version'] != 1 or request['action'] != action:
+        allowed_versions = (1, 2) if action == 'inspect' else (1,)
+        if request['schema_version'] not in allowed_versions or request['action'] != action:
             raise MaterialError('invalid_request_identity')
         if request['engine'] != ENGINE:
             raise MaterialError('invalid_engine')
@@ -159,6 +161,30 @@ class Command(BaseCommand):
         return networks[0]
 
     @staticmethod
+    def _engine_source():
+        engines = list(Engine.objects.filter(name=ENGINE))
+        if len(engines) != 1:
+            raise MaterialError('engine_not_unique')
+        engine = engines[0]
+        if (
+            not isinstance(engine.source, str)
+            or not engine.source.startswith('https://github.com/')
+            or not GIT_SHA.fullmatch(engine.sha)
+            or engine.source != engine.source.rsplit('/archive/', 1)[0] + '/archive/' + engine.sha + '.zip'
+            or isinstance(engine.bench, bool)
+            or not isinstance(engine.bench, int)
+            or engine.bench <= 0
+            or engine.bench > 2**63 - 1
+        ):
+            raise MaterialError('engine_source_invalid')
+        return {
+            'name': engine.name,
+            'repository': engine.source.rsplit('/archive/', 1)[0],
+            'commit_sha': engine.sha,
+            'bench': engine.bench,
+        }
+
+    @staticmethod
     def _opening(name, sha256, source=None):
         books = OPENBENCH_CONFIG.get('books') if isinstance(OPENBENCH_CONFIG, dict) else None
         opening = books.get(name) if isinstance(books, dict) else None
@@ -209,8 +235,8 @@ class Command(BaseCommand):
         network_size = self._inspect_file(
             root, network.sha256, request['network_sha256'], 'network',
         )
-        return {
-            'schema_version': 1,
+        result = {
+            'schema_version': request['schema_version'],
             'action': 'inspect',
             'status': 'observed',
             'engine': ENGINE,
@@ -227,3 +253,6 @@ class Command(BaseCommand):
                 'source': opening['source'],
             },
         }
+        if request['schema_version'] == 2:
+            result['engine_source'] = self._engine_source()
+        return result

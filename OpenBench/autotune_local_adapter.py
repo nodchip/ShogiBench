@@ -63,7 +63,7 @@ def _environment():
     return environment
 
 
-def _decode(completed, action, contract):
+def _decode(completed, action, contract, schema_version):
     if len(completed.stdout) > MAX_RESPONSE_BYTES:
         raise RuntimeError('response too large')
     try:
@@ -72,7 +72,7 @@ def _decode(completed, action, contract):
         raise RuntimeError('response invalid') from None
     if (
         not isinstance(value, dict)
-        or value.get('schema_version') != 1
+        or value.get('schema_version') != schema_version
         or value.get('action') != action
     ):
         raise RuntimeError('response identity differs')
@@ -106,6 +106,17 @@ def autotune_local_adapter(request, target, action):
     body = request.body
     if len(body) != content_length or len(body) > MAX_REQUEST_BYTES:
         return _error('request_size_invalid', 413)
+    try:
+        request_value = json.loads(body.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _error('request_json_invalid', 400)
+    allowed_versions = (1, 2) if target in ('material', 'rating') else (1,)
+    if (
+        not isinstance(request_value, dict)
+        or request_value.get('schema_version') not in allowed_versions
+        or request_value.get('action') != action
+    ):
+        return _error('request_identity_invalid', 400)
     deployment = Path(settings.BASE_DIR)
     manage = deployment / 'manage.py'
     if (
@@ -134,7 +145,12 @@ def autotune_local_adapter(request, target, action):
             timeout=contract['timeout'],
             check=False,
         )
-        value, status = _decode(completed, action, contract)
+        value, status = _decode(
+            completed,
+            action,
+            contract,
+            request_value['schema_version'],
+        )
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return _error('operation_outcome_unknown', 503)
     return JsonResponse(value, status=status)
