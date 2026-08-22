@@ -13,6 +13,24 @@ import OpenSite.settings as project_settings
 class DeploymentSettingsTests(SimpleTestCase):
     """本番起動に必要な Django 設定を確認する。"""
 
+    def test_debug_is_disabled_by_default(self):
+        """明示的なlocal debug opt-inがなければdebug pageを返さない。"""
+        with patch.dict(os.environ, {"SHOGIBENCH_DEBUG": ""}):
+            reloaded_settings = importlib.reload(project_settings)
+
+        self.assertFalse(reloaded_settings.DEBUG)
+        importlib.reload(project_settings)
+
+    def test_exception_reporting_uses_credential_safe_components(self):
+        self.assertEqual(
+            settings.DEFAULT_EXCEPTION_REPORTER_FILTER,
+            "OpenSite.exception_filter.CredentialSafeExceptionReporterFilter",
+        )
+        self.assertEqual(
+            settings.DEFAULT_EXCEPTION_REPORTER,
+            "OpenSite.exception_filter.CredentialSafeExceptionReporter",
+        )
+
     def test_whitenoise_middleware_follows_security_middleware(self):
         """WhiteNoise は SecurityMiddleware の直後で有効化する。"""
         middleware = list(settings.MIDDLEWARE)

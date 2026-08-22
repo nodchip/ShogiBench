@@ -22,8 +22,12 @@
 
 import argparse
 import os
-import re
 import requests
+
+try:
+    from .safe_output import report_response
+except ImportError:
+    from safe_output import report_response
 
 def url_join(*args):
     # Join a set of URL paths while maintaining the correct format
@@ -68,21 +72,10 @@ def upload_network():
         'action'   : 'UPLOAD_NETWORK',
     }
 
-    # Upload the file and report the status code
-    print(data)
+    # Upload without printing the credential-bearing payload or full response.
     with open(args.file, 'rb') as network:
         r = requests.post(url, data=data, files={ 'netfile' : network })
-        print ('Code  : %s' % (r.status_code))
-
-    # Report any error messages
-    pattern = r'<div class="error-message">\s*<pre>(.*?)</pre>\s*</div>'
-    if matches := re.findall(pattern, r.text, re.DOTALL):
-        print ('Error : %s' % (matches[0].strip()))
-
-    # Report any status messages
-    pattern = r'<div class="status-message">\s*<pre>(.*?)</pre>\s*</div>'
-    if matches := re.findall(pattern, r.text, re.DOTALL):
-        print ('Status: %s' % (matches[0].strip()))
+    report_response(r, (args.password,))
 
 if __name__ == '__main__':
     upload_network()

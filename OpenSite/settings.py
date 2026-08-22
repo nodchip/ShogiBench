@@ -21,7 +21,18 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # SECURITY WARNING: keep the secret key used in production secret!
 # SECURITY WARNING: don't run with debug turned on in production!
 SECRET_KEY = '@!zw2l8til1(0eb_nk+1w!(n78gqm&u)s)_v7#k6iseia@g9q0'
-DEBUG = True
+DEBUG = os.environ.get('SHOGIBENCH_DEBUG', '').strip().lower() in {
+    '1', 'true', 'yes', 'on',
+}
+
+# Never expose credential-bearing request fields in Django exception reports,
+# including when an operator explicitly enables DEBUG for local diagnosis.
+DEFAULT_EXCEPTION_REPORTER_FILTER = (
+    'OpenSite.exception_filter.CredentialSafeExceptionReporterFilter'
+)
+DEFAULT_EXCEPTION_REPORTER = (
+    'OpenSite.exception_filter.CredentialSafeExceptionReporter'
+)
 
 ALLOWED_HOSTS = [
     'kishibe.dyndns.tv',

@@ -1,8 +1,12 @@
 import argparse
 import hashlib
 import os
-import re
 import requests
+
+try:
+    from .safe_output import report_response
+except ImportError:
+    from safe_output import report_response
 
 # Basic Information:
 # Test options must contain 'Threads={} Hash={}'
@@ -132,20 +136,10 @@ def create_test():
         "action": "CREATE_TEST",
     }
 
-    # Upload the file and report the status code
-    print(data)
+    # Upload the file without printing the credential-bearing payload or the
+    # complete response body. Django debug responses can contain POST values.
     r = requests.post(url, data=data)
-    print("Code  : %s" % (r.status_code))
-
-    # Report any error messages
-    pattern = r'<div class="error-message">\s*<pre>(.*?)</pre>\s*</div>'
-    if matches := re.findall(pattern, r.text, re.DOTALL):
-        print("Error : %s" % (matches[0].strip()))
-
-    # Report any status messages
-    pattern = r'<div class="status-message">\s*<pre>(.*?)</pre>\s*</div>'
-    if matches := re.findall(pattern, r.text, re.DOTALL):
-        print("Status: %s" % (matches[0].strip()))
+    report_response(r, (args.password,))
 
 
 if __name__ == "__main__":
