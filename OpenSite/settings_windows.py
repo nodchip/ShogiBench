@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 from .settings import *
@@ -17,6 +18,15 @@ def _read_regular_file(path_value, maximum, label):
     if size <= 0 or size > maximum:
         raise RuntimeError(f'{label} has invalid size')
     return path.read_bytes().decode('utf-8', errors='strict')
+
+
+def _artifact_root_was_prevalidated_for_acceptance_audit(artifact_root):
+    return (
+        os.environ.get('SHOGIBENCH_AUDIT_PREVALIDATED_ARTIFACT_ROOT', '')
+        == str(artifact_root)
+        and Path(sys.argv[0]).name.casefold() == 'manage.py'
+        and sys.argv[1:] == ['audit_fresh_server', 'acceptance']
+    )
 
 
 def _load_local_config():
@@ -42,11 +52,17 @@ def _load_local_config():
     if not isinstance(value['rating_game_budgets'], dict):
         raise RuntimeError('rating game budgets are invalid')
     artifact_root = Path(value['training_artifact_root'])
-    if (
-        not artifact_root.is_absolute()
-        or artifact_root.is_symlink()
-        or not artifact_root.is_dir()
-    ):
+    if not artifact_root.is_absolute():
+        raise RuntimeError('training artifact root must be an absolute directory')
+    try:
+        artifact_root_invalid = (
+            artifact_root.is_symlink() or not artifact_root.is_dir()
+        )
+    except PermissionError:
+        if not _artifact_root_was_prevalidated_for_acceptance_audit(artifact_root):
+            raise
+        artifact_root_invalid = False
+    if artifact_root_invalid:
         raise RuntimeError('training artifact root must be an absolute directory')
     return value
 

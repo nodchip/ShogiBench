@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -73,3 +74,65 @@ class WindowsSettingsTests(SimpleTestCase):
                 sys.modules.pop('OpenSite.settings_windows', None)
                 with self.assertRaisesMessage(RuntimeError, 'unexpected properties'):
                     importlib.import_module('OpenSite.settings_windows')
+
+    def _import_with_artifact_probe_denied(self, argv, prevalidated=None):
+        stack = ExitStack()
+        root = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        secret = root / 'signing-key'
+        secret.write_text('s' * 64, encoding='utf-8')
+        config = root / 'local.json'
+        artifacts = root / 'artifacts'
+        artifacts.mkdir()
+        config.write_text(json.dumps({
+            'schema_version': 1,
+            'profile_id': 'shogibench-windows-v1',
+            'autotune_username': 'autotune',
+            'rating_policies': {'acceptance': {'workload_size': 2}},
+            'rating_game_budgets': {'acceptance': 2},
+            'django_signing_key_path': str(secret.resolve()),
+            'training_artifact_root': str(artifacts.resolve()),
+        }), encoding='utf-8')
+        real_is_symlink = Path.is_symlink
+
+        def is_symlink(path):
+            if path == artifacts.resolve():
+                raise PermissionError('fixture protected artifact root')
+            return real_is_symlink(path)
+
+        stack.enter_context(patch.dict(os.environ, {
+            'SHOGIBENCH_LOCAL_CONFIG_PATH': str(config.resolve()),
+            'SHOGIBENCH_AUDIT_PREVALIDATED_ARTIFACT_ROOT': (
+                str(artifacts.resolve()) if prevalidated is None else prevalidated
+            ),
+        }, clear=True))
+        stack.enter_context(patch.object(sys, 'argv', argv))
+        stack.enter_context(
+            patch.object(Path, 'is_symlink', autospec=True, side_effect=is_symlink)
+        )
+        self.addCleanup(stack.close)
+        sys.modules.pop('OpenSite.settings_windows', None)
+        return importlib.import_module('OpenSite.settings_windows'), artifacts.resolve()
+
+    def test_acceptance_audit_can_use_exact_prevalidated_artifact_root(self):
+        windows, artifacts = self._import_with_artifact_probe_denied([
+            'D:/service/deployment/manage.py',
+            'audit_fresh_server',
+            'acceptance',
+        ])
+
+        self.assertEqual(windows.AUTOTUNE_TRAINING_ARTIFACT_ROOT, str(artifacts))
+
+    def test_prevalidated_artifact_root_does_not_bypass_service_probe(self):
+        with self.assertRaises(PermissionError):
+            self._import_with_artifact_probe_denied([
+                'D:/service/deployment/manage.py',
+                'runserver',
+            ])
+
+    def test_prevalidated_artifact_root_must_match_config_exactly(self):
+        with self.assertRaises(PermissionError):
+            self._import_with_artifact_probe_denied([
+                'D:/service/deployment/manage.py',
+                'audit_fresh_server',
+                'acceptance',
+            ], prevalidated='D:/different')
