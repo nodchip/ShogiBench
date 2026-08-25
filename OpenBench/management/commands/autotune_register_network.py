@@ -177,14 +177,13 @@ class Command(BaseCommand):
         if lock:
             query = query.select_for_update()
         same_hash = list(query.filter(sha256=network_id))
-        exact = [item for item in same_hash if (
+        owned = [item for item in same_hash if (
             item.engine == request['engine']
-            and item.name == request['logical_id']
             and item.author == username
             and not item.default
             and not item.was_default
         )]
-        if same_hash and len(exact) != 1:
+        if same_hash and len(owned) != 1:
             raise RegistrationError('network_id_conflict')
         name_conflict = query.filter(
             engine=request['engine'], name=request['logical_id'],
@@ -193,7 +192,7 @@ class Command(BaseCommand):
             raise RegistrationError('network_name_conflict')
         if Book.objects.filter(sha256=network_id).exists():
             raise RegistrationError('network_storage_conflict')
-        return exact[0] if exact else None
+        return owned[0] if owned else None
 
     @staticmethod
     def _verify_target(target, request):

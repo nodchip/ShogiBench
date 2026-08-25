@@ -100,6 +100,18 @@ class AutotuneRegisterNetworkTests(TestCase):
         self.assertEqual(Network.objects.count(), 1)
         self.assertEqual(LogEvent.objects.count(), 1)
 
+        reused = self._call(
+            'register', self._payload('register', logical_id='next-request-name'),
+        )
+        self.assertEqual(reused['status'], 'observed')
+        self.assertEqual(reused['logical_id'], 'next-request-name')
+        observed_reuse = self._call(
+            'get', self._payload('get', logical_id='next-request-name'),
+        )
+        self.assertEqual(observed_reuse['status'], 'observed')
+        self.assertEqual(Network.objects.count(), 1)
+        self.assertEqual(LogEvent.objects.count(), 1)
+
     def test_hash_and_size_mismatch_do_not_mutate(self):
         rejected = self._reject(
             'register', self._payload('register', sha256='0' * 64),
