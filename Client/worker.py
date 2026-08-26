@@ -462,9 +462,19 @@ class MatchRunner:
     def concurrency_settings(config):
 
         # Already computed for us by the Server
+        games = config.workload['distribution']['games-per-runner']
+        if MatchRunner.is_shogi(config):
+            if games % 2 != 0:
+                raise utils.OpenBenchFatalWorkerException(
+                    'Shogitest requires an even total game allocation'
+                )
+            # Shogitest's -repeat selects two rounds and -games is applied to
+            # each round. OpenBench distributes a total game count, so convert
+            # that total to the per-round value expected by shogitest.
+            games = games // 2
         return '-concurrency %d -games %d' % (
             config.workload['distribution']['concurrency-per'],
-            config.workload['distribution']['games-per-runner'],
+            games,
         )
 
     @staticmethod

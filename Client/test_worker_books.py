@@ -15,6 +15,43 @@ import worker
 
 class WorkerBookTests(unittest.TestCase):
 
+    def test_shogi_runner_converts_total_games_to_shogitest_per_round_games(self):
+        config = types.SimpleNamespace(
+            workload={
+                "test": {"book": {"name": "SHOGI.startpos.sfen.epd"}},
+                "distribution": {"concurrency-per": 1, "games-per-runner": 2},
+            }
+        )
+
+        self.assertEqual(
+            worker.MatchRunner.concurrency_settings(config),
+            "-concurrency 1 -games 1",
+        )
+
+    def test_shogi_runner_rejects_odd_total_game_allocation(self):
+        config = types.SimpleNamespace(
+            workload={
+                "test": {"book": {"name": "SHOGI.startpos.sfen.epd"}},
+                "distribution": {"concurrency-per": 1, "games-per-runner": 3},
+            }
+        )
+
+        with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+            worker.MatchRunner.concurrency_settings(config)
+
+    def test_non_shogi_runner_keeps_total_game_allocation(self):
+        config = types.SimpleNamespace(
+            workload={
+                "test": {"book": {"name": "chess.epd"}},
+                "distribution": {"concurrency-per": 4, "games-per-runner": 32},
+            }
+        )
+
+        self.assertEqual(
+            worker.MatchRunner.concurrency_settings(config),
+            "-concurrency 4 -games 32",
+        )
+
     def test_shogi_runner_requires_and_forwards_canonical_rule_profile(self):
         config = types.SimpleNamespace(
             workload={
