@@ -1398,10 +1398,11 @@ def safe_run_benchmarks(config, branch, engine, network):
     network_config = config.workload['test'][branch]['build'].get('network')
     network_option = network_config['option'] if network_config else None
     benchmark_options = config.workload['test'][branch]['build'].get('benchmark_options')
-    benchmark_network = (
-        os.path.relpath(network, os.path.dirname(binary))
-        if network and network_config else network
-    )
+    # Bench engines inherit the worker root as their working directory.  The
+    # external-network staging helper already returns an absolute directory,
+    # so rebasing it relative to Engines would make the engine resolve the
+    # resulting path from the wrong directory.
+    benchmark_network = network
 
     for attempt in range(2):
         try:

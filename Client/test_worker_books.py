@@ -367,12 +367,13 @@ class WorkerBookTests(unittest.TestCase):
             "network": {"option": "EvalDir"},
             "benchmark_options": {"PvInterval": "100000000"},
         }
+        runtime_directory = os.path.abspath("Networks/ABCDEF12.eval")
 
         with patch.object(
             worker.bench, "run_benchmark", side_effect=[(100, 123), (1000, 123)],
         ) as run_benchmark:
             worker.safe_run_benchmarks(
-                config, "dev", "engine.exe", os.path.abspath("Networks/ABCDEF12.eval"),
+                config, "dev", "engine.exe", runtime_directory,
             )
 
         self.assertEqual(
@@ -380,14 +381,14 @@ class WorkerBookTests(unittest.TestCase):
         )
         self.assertEqual(
             run_benchmark.call_args_list[0].args[1],
-            os.path.join("..", "Networks", "ABCDEF12.eval"),
+            runtime_directory,
         )
         self.assertEqual(
             run_benchmark.call_args_list[1].kwargs["network_option"], "EvalDir",
         )
         self.assertEqual(
             run_benchmark.call_args_list[1].args[1],
-            os.path.join("..", "Networks", "ABCDEF12.eval"),
+            runtime_directory,
         )
         self.assertEqual(
             run_benchmark.call_args_list[0].kwargs["benchmark_options"],
