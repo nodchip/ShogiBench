@@ -60,6 +60,14 @@ class FreshAuditTests(TestCase):
 
         self.assertIsNone(command._validate("acceptance", counts, media_file_count=3))
 
+    def test_acceptance_allows_registered_candidate_engines(self):
+        command = Command()
+        command._canonical_exact = lambda: True
+        command._autotune_bounded = lambda: True
+        counts = self._seed_counts(engines=2)
+
+        self.assertIsNone(command._validate("acceptance", counts, media_file_count=2))
+
     def test_bootstrap_still_requires_exactly_one_seed_network(self):
         command = Command()
         command._canonical_exact = lambda: True
@@ -68,6 +76,17 @@ class FreshAuditTests(TestCase):
 
         self.assertEqual(
             command._validate("bootstrap", counts, media_file_count=3),
+            "minimal_seed_count_mismatch",
+        )
+
+    def test_bootstrap_still_requires_exactly_one_seed_engine(self):
+        command = Command()
+        command._canonical_exact = lambda: True
+        command._autotune_bounded = lambda: True
+        counts = self._seed_counts(engines=2)
+
+        self.assertEqual(
+            command._validate("bootstrap", counts, media_file_count=2),
             "minimal_seed_count_mismatch",
         )
 
