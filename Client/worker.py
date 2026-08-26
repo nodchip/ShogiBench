@@ -1398,19 +1398,23 @@ def safe_run_benchmarks(config, branch, engine, network):
     network_config = config.workload['test'][branch]['build'].get('network')
     network_option = network_config['option'] if network_config else None
     benchmark_options = config.workload['test'][branch]['build'].get('benchmark_options')
+    benchmark_network = (
+        os.path.relpath(network, os.path.dirname(binary))
+        if network and network_config else network
+    )
 
     for attempt in range(2):
         try:
             print('\nWarming up Benchmark for %s' % (name))
             bench.run_benchmark(
-                binary, network, private, 1, 1, expected,
+                binary, benchmark_network, private, 1, 1, expected,
                 network_option=network_option,
                 benchmark_options=benchmark_options,
             )
 
             print('\nRunning %dx Benchmarks for %s' % (config.threads, name))
             speed, nodes = bench.run_benchmark(
-                binary, network, private, config.threads, 1, expected,
+                binary, benchmark_network, private, config.threads, 1, expected,
                 network_option=network_option,
                 benchmark_options=benchmark_options,
             )
