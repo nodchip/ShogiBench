@@ -8,3 +8,14 @@ OpenBench is the primary testing framework used for the development of [Ethereal
 You can join OpenBench's [Discord server](https://discord.com/invite/9MVg7fBTpM) to join the discussion, see what developers are working on and talking about, or to find out how you can contribute to the project and become a part of it. OpenBench is heavily inspired by [Fishtest](https://github.com/glinscott/fishtest). The project is powered by the [Django Web Framework](https://www.djangoproject.com/) and [fastchess](https://github.com/Disservin/fastchess).
 
 Documentation for OpenBench is available in the [Wiki](https://github.com/AndyGrant/OpenBench/wiki)
+
+## Django secret key
+
+`OpenSite/settings.py` does not contain a signing key. For development, set
+`SHOGIBENCH_DJANGO_SECRET_KEY`, set `SHOGIBENCH_DJANGO_SECRET_KEY_FILE` to a
+protected file, or create the ignored repository-local `.django-secret-key`
+file. The key must contain at least 50 characters. Production can continue to
+resolve its protected key through `SHOGIBENCH_LOCAL_CONFIG_PATH` and the
+`django_signing_key_path` field.
+
+Never commit, print, or pass the key as a command-line argument.

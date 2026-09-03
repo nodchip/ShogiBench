@@ -4,6 +4,7 @@ Client/*
 credentials
 credentials.*
 db.sqlite3
+/.django-secret-key
 staticfiles/
 
 Scripts/Engines/*
