@@ -933,6 +933,13 @@ def validate_syzygy_exists(config, K):
 
 def scale_time_control(workload, scale_factor, branch):
 
+    if workload['test'].get('goal_timing') is not None:
+        validate_goal_fixed_move(workload)
+        if scale_factor != 1.0:
+            raise utils.OpenBenchFatalWorkerException('fixed move scale differs')
+        # Shogitest v0.1.2 takes integer milliseconds, unlike cutechess seconds.
+        return 'st=1000 timemargin=250'
+
     # Extract everything from the workload dictionary
     time_control  = workload['test'][branch]['time_control']
 
@@ -952,6 +959,11 @@ def scale_time_control(workload, scale_factor, branch):
     # Scale the time based on this machine's NPS. Add a time Margin to avoid time losses.
     if results:
         mode, value = results.group('mode', 'value')
+        if workload['test'].get('book', {}).get('name', '').startswith('SHOGI.'):
+            milliseconds = round(float(value) * scale_factor)
+            if milliseconds < 1:
+                raise utils.OpenBenchFatalWorkerException('move time is below one millisecond')
+            return 'st=%d timemargin=250' % milliseconds
         return 'st=%.2f timemargin=250' % ((float(value) * scale_factor / 1000))
 
     # Searching for "X/Y+Z" time controls
@@ -997,6 +1009,10 @@ def determine_scale_factor(config, dev_name, dev_network, base_name, base_networ
     base_nps = safe_run_benchmarks(config, 'base', base_name, base_network)
     ServerReporter.report_nps(config, dev_nps, base_nps)
 
+    if config.workload['test'].get('goal_timing') is not None:
+        validate_goal_fixed_move(config.workload)
+        return 1.0
+
     dev_factor = base_factor = None
 
     # Scaling is only done relative to the Dev Engine
@@ -1019,6 +1035,26 @@ def determine_scale_factor(config, dev_name, dev_network, base_name, base_networ
         print ('Scale Factor (Using Both): %.4f' % (factor))
 
     return factor
+
+
+def validate_goal_fixed_move(workload):
+    """Fail closed before a runner starts if the fixed-clock payload drifted."""
+    test = workload['test']
+    expected = {
+        'profile_id': 'goal-fixed-move-2t-v1', 'move_time_ms': 1000,
+        'time_margin_ms': 250, 'scale_factor': 1.0, 'threads': 2, 'hash_mb': 128,
+    }
+    options = 'Threads=2 Hash=128 option.EnteringKingRule=CSARule24'
+    if (
+        test.get('goal_timing') != expected
+        or test.get('rule_profile_id') != 'canonical-yaneuraou-csarule24-v1'
+        or test.get('book', {}).get('name') != 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
+        or any(test.get(side, {}).get('time_control') != 'MT=1000' for side in ('dev', 'base'))
+        or any(test.get(side, {}).get('options') != options for side in ('dev', 'base'))
+        or not test.get('dev', {}).get('network')
+        or test.get('dev', {}).get('network') != test.get('base', {}).get('network')
+    ):
+        raise utils.OpenBenchFatalWorkerException('fixed move comparison differs')
 
 ## Functions interacting with the OpenBench server that establish the initial
 ## connection and then make simple requests to retrieve Workloads as json objects

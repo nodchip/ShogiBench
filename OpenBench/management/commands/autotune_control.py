@@ -11,6 +11,7 @@ from django.db.models import Sum
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
 from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonical_rule
+from OpenBench import goal_fixed_move
 
 MAX_REQUEST_BYTES = 65536
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
@@ -162,6 +163,9 @@ def _opening_from_test(test):
 
 
 def _stage_from_test(test):
+    fixed_stage = goal_fixed_move.stage_for_test(test)
+    if fixed_stage is not None:
+        return fixed_stage
     observed = _policy_from_test(test)
     policies = getattr(settings, 'AUTOTUNE_RATING_POLICIES', {})
     budgets = getattr(settings, 'AUTOTUNE_RATING_GAME_BUDGETS', {})
@@ -176,7 +180,7 @@ def _stage_from_test(test):
 
 def _observation(test, stage=None, schema_version=1):
     terminal_reason, terminal_diagnostic = _terminal_outcome(test)
-    return {
+    observation = {
         'test_id': test.id,
         'rule_profile_id': test.rule_profile_id,
         'stage': stage or _stage_from_test(test),
@@ -205,6 +209,14 @@ def _observation(test, stage=None, schema_version=1):
         'created_at': test.creation.isoformat(),
         'updated_at': test.updated.isoformat(),
     }
+    if goal_fixed_move.stage_for_test(test) is not None:
+        observation['timing'] = dict(goal_fixed_move.TIMING)
+        errors = test.test.aggregate(
+            engine_errors=Sum('crashes'), time_losses=Sum('timeloss'),
+            illegal_moves=Sum('illegal_moves'),
+        )
+        observation['statistics']['errors'] = {name: value or 0 for name, value in errors.items()}
+    return observation
 
 
 class Command(BaseCommand):
@@ -286,6 +298,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _policy(stage, supplied):
+        if stage in goal_fixed_move.policies() and supplied == goal_fixed_move.policies()[stage]:
+            return supplied
         policies = getattr(settings, 'AUTOTUNE_RATING_POLICIES', {})
         if not isinstance(policies, dict) or stage not in policies:
             raise ControlError('unknown_stage')
@@ -412,7 +426,20 @@ class Command(BaseCommand):
         rule_profile = self._profile()
         actor = self._actor(self._username())
         policy = self._policy(request['stage'], request['policy'])
+        fixed_move = policy == goal_fixed_move.policies().get(request['stage'])
+        if fixed_move and (
+            request['schema_version'] != 2
+            or not isinstance(request['dev'], dict)
+            or not isinstance(request['base'], dict)
+            or request['dev'].get('options') != goal_fixed_move.OPTIONS
+            or request['base'].get('options') != goal_fixed_move.OPTIONS
+            or not request['dev'].get('network')
+            or request['dev'].get('network') != request['base'].get('network')
+        ):
+            raise ControlError('fixed_move_comparison_mismatch')
         game_budget = self._game_budget(request['stage'], request['game_budget'])
+        if fixed_move and game_budget != (2 if request['stage'] == 'acceptance' else 131072):
+            raise ControlError('fixed_move_comparison_mismatch')
         opening = self._opening(request['opening'])
         schema_version = request['schema_version']
         dev, dev_engine, dev_network = self._side(request['dev'], schema_version)
@@ -487,6 +514,7 @@ class Command(BaseCommand):
             raise ControlError('rule_profile_mismatch')
         return test
 
+    @transaction.atomic
     def _get(self, request):
         test = self._owned_test(request['test_id'])
         schema_version = request['schema_version']

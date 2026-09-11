@@ -29,6 +29,8 @@ import re
 import sys
 
 import OpenBench.utils
+from django.conf import settings
+from OpenBench import goal_fixed_move
 
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.models import Result, Test
@@ -233,6 +235,14 @@ def workload_to_dictionary(test, result, machine):
         'scale_method'  : test.scale_method,
         'scale_nps'     : test.scale_nps,
     }
+    if test.author == getattr(settings, 'AUTOTUNE_USERNAME', None):
+        fixed_stage = goal_fixed_move.stage_for_test(test)
+        if fixed_stage is None and goal_fixed_move.TIME_CONTROL in (
+            test.dev_time_control, test.base_time_control,
+        ):
+            raise ValueError('Goal fixed-move workload identity differs')
+        if fixed_stage is not None:
+            workload['test']['goal_timing'] = dict(goal_fixed_move.TIMING)
 
     workload['test']['book'] = {
         'name'   : test.book_name,

@@ -39,6 +39,7 @@ from wsgiref.util import FileWrapper
 from OpenSite.settings import MEDIA_ROOT, PROJECT_PATH
 
 from OpenBench.config import OPENBENCH_CONFIG
+from OpenBench import goal_fixed_move
 from OpenBench.models import *
 from OpenBench.side_stats import SIDE_STAT_FIELDS, parse_side_stats_payload
 from OpenBench.stats import TrinomialSPRT, PentanomialSPRT
@@ -570,6 +571,14 @@ def update_test(request, machine):
         if test.finished or test.deleted:
             return { 'stop' : True }
 
+        if goal_fixed_move.stage_for_test(test) is not None:
+            if any(value < 0 or value > games for value in (crashes, timelosses, illegals)):
+                return { 'error' : 'Invalid fixed-move error counters' }
+            if machine_id != machine.id or not Result.objects.filter(
+                id=result_id, test=test, machine=machine,
+            ).exists():
+                return { 'error' : 'Fixed-move result identity mismatch' }
+
         was_finished = test.finished
 
         test.losses += losses # Trinomial
@@ -627,36 +636,38 @@ def update_test(request, machine):
             # Finished, and always passing, for a completed DATAGEN Workload
             test.passed = test.finished = test.games >= test.max_games
 
+        # Commit result counters with the terminal test, before read-back can see it.
+        # Update Result object; No risk from concurrent access
+        result_updates = {
+            'games'    : F('games'   ) + games,
+            'losses'   : F('losses'  ) + losses,
+            'draws'    : F('draws'   ) + draws,
+            'wins'     : F('wins'    ) + wins,
+            'LL'       : F('LL'      ) + LL,
+            'LD'       : F('LD'      ) + LD,
+            'DD'       : F('DD'      ) + DD,
+            'DW'       : F('DW'      ) + DW,
+            'WW'       : F('WW'      ) + WW,
+            'crashes'  : F('crashes' ) + crashes,
+            'timeloss' : F('timeloss') + timelosses,
+            'illegal_moves': F('illegal_moves') + illegals,
+            'updated'  : timezone.now(),
+        }
+
+        if side_stats is not None:
+            result_updates.update({
+                field: F(field) + side_stats[field]
+                for field in SIDE_STAT_FIELDS
+            })
+
+        Result.objects.filter(id=result_id).update(**result_updates)
+
         test.save()
 
         completed = not was_finished and test.finished
 
     if completed:
         send_completion_email(request, test)
-
-    # Update Result object; No risk from concurrent access
-    result_updates = {
-        'games'    : F('games'   ) + games,
-        'losses'   : F('losses'  ) + losses,
-        'draws'    : F('draws'   ) + draws,
-        'wins'     : F('wins'    ) + wins,
-        'LL'       : F('LL'      ) + LL,
-        'LD'       : F('LD'      ) + LD,
-        'DD'       : F('DD'      ) + DD,
-        'DW'       : F('DW'      ) + DW,
-        'WW'       : F('WW'      ) + WW,
-        'crashes'  : F('crashes' ) + crashes,
-        'timeloss' : F('timeloss') + timelosses,
-        'updated'  : timezone.now(),
-    }
-
-    if side_stats is not None:
-        result_updates.update({
-            field: F(field) + side_stats[field]
-            for field in SIDE_STAT_FIELDS
-        })
-
-    Result.objects.filter(id=result_id).update(**result_updates)
 
     # Update Profile object; No risk from concurrent access
     Profile.objects.filter(user=Machine.objects.get(id=machine_id).user).update(

@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 
 from OpenBench.models import Engine, LogEvent, Machine, Network, Profile, Result, RuleProfile, Test
 from OpenBench.rule_profiles import canonical_profile_fields
@@ -116,6 +116,100 @@ class AutotuneControlTests(TestCase):
             'dev': self._source_v2('dev-source', 'a' * 40, 111),
             'base': self._source_v2('base-source', 'c' * 40, 222),
         }
+
+    def _fixed_move_payload(self, stage='acceptance'):
+        from OpenBench import goal_fixed_move
+        payload=self._create_payload_v2()
+        payload['stage']=stage
+        payload['policy']=goal_fixed_move.policies()[stage]
+        payload['game_budget']=2 if stage=='acceptance' else 131072
+        for side in ('dev','base'):
+            payload[side]['options']=goal_fixed_move.OPTIONS
+        return payload
+
+    def test_fixed_move_create_get_and_worker_payload_are_exact(self):
+        from OpenBench import goal_fixed_move
+        from OpenBench.workloads.get_workload import workload_to_dictionary
+        created=self._request('create',self._fixed_move_payload(),schema_version=2)
+        self.assertEqual(created['timing'],goal_fixed_move.TIMING)
+        self.assertEqual(created['statistics']['errors'],{'engine_errors':0,'time_losses':0,'illegal_moves':0})
+        test=Test.objects.get(pk=created['test_id'])
+        observed=self._request('get',{'test_id':test.id},schema_version=2)
+        self.assertEqual(observed['timing'],goal_fixed_move.TIMING)
+        self.assertEqual(observed['stage'],'acceptance')
+        machine=Machine.objects.create(user=self.other_user,info={'concurrency':2,'physical_cores':2,'sockets':1})
+        result=Result.objects.create(test=test,machine=machine)
+        config={**OPENBENCH_CONFIG,'engines':{self.engine.name:{'nps':1000,'build':{},'private':False}}}
+        distribution={'runner-count':1,'concurrency-per':1,'games-per-runner':2}
+        with patch('OpenBench.workloads.get_workload.OPENBENCH_CONFIG',config), patch('OpenBench.workloads.get_workload.game_distribution',return_value=distribution):
+            workload=workload_to_dictionary(test,result,machine)
+            self.assertEqual(workload['test']['goal_timing'],goal_fixed_move.TIMING)
+            self.assertEqual(workload['test']['dev']['time_control'],'MT=1000')
+            self.assertEqual(workload['test']['base']['options'],goal_fixed_move.OPTIONS)
+            test.book_name = 'SHOGI.changed.sfen.epd'
+            with self.assertRaises(ValueError):
+                workload_to_dictionary(test, result, machine)
+            test.book_name = OPENING['name']
+            test.author='other'
+            self.assertNotIn('goal_timing',workload_to_dictionary(test,result,machine)['test'])
+
+    @override_settings(AUTOTUNE_RATING_GAME_BUDGETS={'acceptance':2,'stc':131072})
+    def test_fixed_move_screening_retains_sprt_and_exact_budget(self):
+        created=self._request('create',self._fixed_move_payload('stc'),schema_version=2)
+        self.assertEqual(created['stage'],'stc')
+        self.assertEqual(created['test_mode'],'SPRT')
+        self.assertEqual(created['max_games'],131072)
+        self.assertEqual(created['statistics']['llr']['upper'],__import__('math').log(0.9/0.05))
+
+    def test_fixed_move_rejects_changed_common_conditions_without_creating_test(self):
+        changes=[
+            lambda p:p['base'].update(network='87654321'),
+            lambda p:p['dev'].update(options='Threads=1 Hash=128 option.EnteringKingRule=CSARule24'),
+            lambda p:p['policy'].update(dev_time_control='MT=999'),
+            lambda p:p.update(game_budget=4),
+        ]
+        for change in changes:
+            payload=self._fixed_move_payload();change(payload)
+            with self.subTest(change=change),self.assertRaises(CommandError):
+                self._request('create',payload,schema_version=2)
+            self.assertEqual(Test.objects.count(),0)
+
+    def test_fixed_move_readback_rejects_mutated_network(self):
+        created=self._request('create',self._fixed_move_payload(),schema_version=2)
+        test=Test.objects.get(pk=created['test_id']);test.base_network='87654321';test.save()
+        with self.assertRaises(CommandError):
+            self._request('get',{'test_id':test.id},schema_version=2)
+
+    def test_fixed_move_error_counts_are_atomic_and_invalid_counts_do_not_mutate(self):
+        from OpenBench.utils import update_test
+        created = self._request('create', self._fixed_move_payload(), schema_version=2)
+        test = Test.objects.get(pk=created['test_id'])
+        machine = Machine.objects.create(user=self.other_user, info={})
+        result = Result.objects.create(test=test, machine=machine)
+        payload = {
+            'crashes': '1', 'timelosses': '1', 'illegals': '1',
+            'machine_id': str(machine.id), 'result_id': str(result.id),
+            'test_id': str(test.id), 'trinomial': '2 0 0', 'pentanomial': '1 0 0 0 0',
+            'rule_profile_id': self.rule.profile_id,
+            'rule_profile_semantics_sha256': self.rule.semantics_sha256,
+        }
+        factory = RequestFactory()
+        for field in ('crashes', 'timelosses', 'illegals'):
+            for value in ('-1', '3'):
+                rejected = update_test(factory.post('/', {**payload, field: value}), machine)
+                self.assertIn('error', rejected)
+                test.refresh_from_db(); result.refresh_from_db()
+                self.assertEqual((test.games, result.games, result.illegal_moves), (0, 0, 0))
+        # The completion callback can only see the terminal count and its errors together.
+        def check_committed(*args):
+            result.refresh_from_db()
+            self.assertEqual((result.games, result.crashes, result.timeloss, result.illegal_moves), (2, 1, 1, 1))
+        with patch('OpenBench.utils.send_completion_email', side_effect=check_committed):
+            self.assertEqual(update_test(factory.post('/', payload), machine), {'stop': True})
+        observed = self._request('get', {'test_id': test.id}, schema_version=2)
+        self.assertEqual(observed['statistics']['errors'], {
+            'engine_errors': 1, 'time_losses': 1, 'illegal_moves': 1,
+        })
 
     def test_create_get_and_budget_stop(self):
         created = self._request('create', self._create_payload())

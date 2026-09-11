@@ -126,6 +126,7 @@ class Result(Model):
     games    = IntegerField(default=0)
     crashes  = IntegerField(default=0)
     timeloss = IntegerField(default=0)
+    illegal_moves = IntegerField(default=0)
 
     # 将棋の先後別統計
     side_stats_games = IntegerField(default=0)
