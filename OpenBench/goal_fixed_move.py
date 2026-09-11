@@ -2,6 +2,7 @@
 
 PROFILE_ID = 'goal-fixed-move-2t-v1'
 OPTIONS = 'Threads=2 Hash=128 option.EnteringKingRule=CSARule24'
+ZERO_DELAY_OPTIONS = OPTIONS + ' NetworkDelay=0 NetworkDelay2=0'
 TIME_CONTROL = 'MT=1000'
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
 TIMING = {
@@ -12,6 +13,15 @@ TIMING = {
     'threads': 2,
     'hash_mb': 128,
 }
+ZERO_DELAY_TIMING = {**TIMING, 'profile_id': 'goal-fixed-move-2t-zero-delay-v1'}
+
+
+def timing_for_options(options):
+    if options == OPTIONS:
+        return dict(TIMING)
+    if options == ZERO_DELAY_OPTIONS:
+        return dict(ZERO_DELAY_TIMING)
+    return None
 
 
 def policies():
@@ -43,7 +53,7 @@ def stage_for_test(test):
         return None
     stage = matches[0]
     if (
-        test.dev_options != OPTIONS or test.base_options != OPTIONS
+        timing_for_options(test.dev_options) is None or test.base_options != test.dev_options
         or not test.dev_network or test.dev_network != test.base_network
         or test.rule_profile_id != 'canonical-yaneuraou-csarule24-v1'
         or test.book_name != OPENING_NAME

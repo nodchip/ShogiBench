@@ -1045,6 +1045,9 @@ def validate_goal_fixed_move(workload):
         'time_margin_ms': 250, 'scale_factor': 1.0, 'threads': 2, 'hash_mb': 128,
     }
     options = 'Threads=2 Hash=128 option.EnteringKingRule=CSARule24'
+    if test.get('goal_timing', {}).get('profile_id') == 'goal-fixed-move-2t-zero-delay-v1':
+        expected['profile_id'] = 'goal-fixed-move-2t-zero-delay-v1'
+        options += ' NetworkDelay=0 NetworkDelay2=0'
     if (
         test.get('goal_timing') != expected
         or test.get('rule_profile_id') != 'canonical-yaneuraou-csarule24-v1'

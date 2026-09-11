@@ -20,6 +20,26 @@ def workload():
 
 
 class FixedMoveTests(unittest.TestCase):
+    def test_zero_delay_profile_requires_both_exact_options(self):
+        value = workload()
+        value['test']['goal_timing']['profile_id'] = 'goal-fixed-move-2t-zero-delay-v1'
+        for side in ('dev', 'base'):
+            value['test'][side]['options'] += ' NetworkDelay=0 NetworkDelay2=0'
+        for side in ('dev', 'base'):
+            self.assertEqual(worker.scale_time_control(value, 1.0, side), 'st=1000 timemargin=250')
+        for replacement in (
+            workload()['test']['base']['options'],
+            value['test']['base']['options'].replace('NetworkDelay2=0', 'NetworkDelay2=500'),
+            value['test']['base']['options'] + ' MinimumThinkingTime=1000',
+        ):
+            changed = __import__('copy').deepcopy(value)
+            changed['test']['base']['options'] = replacement
+            with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+                worker.scale_time_control(changed, 1.0, 'dev')
+        value['test']['goal_timing']['profile_id'] = 'goal-fixed-move-2t-v1'
+        with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+            worker.scale_time_control(value, 1.0, 'dev')
+
     def test_fixed_clock_keeps_bench_validation_but_does_not_scale_by_nps(self):
         config = types.SimpleNamespace(workload=workload())
         with patch.object(worker, 'safe_run_benchmarks', side_effect=[1234, 9876]) as bench, patch.object(worker.ServerReporter, 'report_nps') as report:

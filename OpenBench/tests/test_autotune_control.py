@@ -153,6 +153,34 @@ class AutotuneControlTests(TestCase):
             test.author='other'
             self.assertNotIn('goal_timing',workload_to_dictionary(test,result,machine)['test'])
 
+    def test_zero_delay_profile_create_get_workload_and_mismatch(self):
+        from OpenBench import goal_fixed_move
+        from OpenBench.workloads.get_workload import workload_to_dictionary
+        payload = self._fixed_move_payload()
+        payload['dev']['options'] = goal_fixed_move.ZERO_DELAY_OPTIONS
+        with self.assertRaises(CommandError):
+            self._request('create', payload, schema_version=2)
+        self.assertEqual(Test.objects.count(), 0)
+        payload['base']['options'] = goal_fixed_move.ZERO_DELAY_OPTIONS
+        created = self._request('create', payload, schema_version=2)
+        self.assertEqual(created['timing'], goal_fixed_move.ZERO_DELAY_TIMING)
+        observed = self._request('get', {'test_id': created['test_id']}, schema_version=2)
+        self.assertEqual(observed['timing'], goal_fixed_move.ZERO_DELAY_TIMING)
+        test = Test.objects.get(pk=created['test_id'])
+        machine = Machine.objects.create(user=self.other_user, info={'concurrency':2,'physical_cores':2,'sockets':1})
+        result = Result.objects.create(test=test, machine=machine)
+        config = {**OPENBENCH_CONFIG,'engines':{self.engine.name:{'nps':1000,'build':{},'private':False}}}
+        distribution = {'runner-count':1,'concurrency-per':1,'games-per-runner':2}
+        with patch('OpenBench.workloads.get_workload.OPENBENCH_CONFIG', config), patch('OpenBench.workloads.get_workload.game_distribution', return_value=distribution):
+            workload = workload_to_dictionary(test, result, machine)
+        self.assertEqual(workload['test']['goal_timing'], goal_fixed_move.ZERO_DELAY_TIMING)
+        for side in ('dev', 'base'):
+            self.assertEqual(workload['test'][side]['options'], goal_fixed_move.ZERO_DELAY_OPTIONS)
+        test.base_options = goal_fixed_move.OPTIONS
+        test.save()
+        with self.assertRaises(CommandError):
+            self._request('get', {'test_id':test.id}, schema_version=2)
+
     @override_settings(AUTOTUNE_RATING_GAME_BUDGETS={'acceptance':2,'stc':131072})
     def test_fixed_move_screening_retains_sprt_and_exact_budget(self):
         created=self._request('create',self._fixed_move_payload('stc'),schema_version=2)

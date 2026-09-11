@@ -242,7 +242,7 @@ def workload_to_dictionary(test, result, machine):
         ):
             raise ValueError('Goal fixed-move workload identity differs')
         if fixed_stage is not None:
-            workload['test']['goal_timing'] = dict(goal_fixed_move.TIMING)
+            workload['test']['goal_timing'] = goal_fixed_move.timing_for_options(test.dev_options)
 
     workload['test']['book'] = {
         'name'   : test.book_name,

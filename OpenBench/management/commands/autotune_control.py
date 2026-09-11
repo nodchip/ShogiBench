@@ -210,7 +210,7 @@ def _observation(test, stage=None, schema_version=1):
         'updated_at': test.updated.isoformat(),
     }
     if goal_fixed_move.stage_for_test(test) is not None:
-        observation['timing'] = dict(goal_fixed_move.TIMING)
+        observation['timing'] = goal_fixed_move.timing_for_options(test.dev_options)
         errors = test.test.aggregate(
             engine_errors=Sum('crashes'), time_losses=Sum('timeloss'),
             illegal_moves=Sum('illegal_moves'),
@@ -431,8 +431,8 @@ class Command(BaseCommand):
             request['schema_version'] != 2
             or not isinstance(request['dev'], dict)
             or not isinstance(request['base'], dict)
-            or request['dev'].get('options') != goal_fixed_move.OPTIONS
-            or request['base'].get('options') != goal_fixed_move.OPTIONS
+            or goal_fixed_move.timing_for_options(request['dev'].get('options')) is None
+            or request['base'].get('options') != request['dev'].get('options')
             or not request['dev'].get('network')
             or request['dev'].get('network') != request['base'].get('network')
         ):

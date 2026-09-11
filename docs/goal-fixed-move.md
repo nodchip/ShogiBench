@@ -1,5 +1,16 @@
 # Goal fixed-move screening
 
+The separate `goal-fixed-move-2t-zero-delay-v1` profile adds exactly
+`NetworkDelay=0 NetworkDelay2=0` on both engines. Persisted options distinguish
+it from the original profile; create, GET, workload delivery and worker validation
+reject mixed or arbitrary options. Existing tests keep their original identity.
+The runner still sends 1,000 ms byoyomi with zero remaining main time and no
+speed scaling. Its 250 ms timeout margin is not additional engine thinking time.
+Engine-specific minimum time and rounding remain source-bound. Verify wall time,
+reported time and nodes on multiple ordinary positions for both sides before
+dispatch, with tolerances declared in advance. Classify early exits separately;
+neither exact 1,000 ms on every position nor padding with sleep is promised.
+
 The closed `goal-fixed-move-2t-v1` profile compares two source revisions with
 the same registered network. Both sides use two threads, 128 MiB Hash and
 CSARule24. Acceptance plays two games; the following STC uses the existing
