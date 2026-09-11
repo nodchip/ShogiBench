@@ -182,6 +182,37 @@ class AutotuneControlTests(TestCase):
             self._request('get', {'test_id':test.id}, schema_version=2)
 
     @override_settings(AUTOTUNE_RATING_GAME_BUDGETS={'acceptance':2,'stc':131072})
+    def test_common_fv_create_get_and_workload_keep_exact_scale(self):
+        from OpenBench import goal_fixed_move
+        from OpenBench.workloads.get_workload import workload_to_dictionary
+        for scale in (16, 24):
+            payload = self._fixed_move_payload()
+            options = goal_fixed_move.ZERO_DELAY_OPTIONS + ' FV_SCALE=%d' % scale
+            payload['dev']['options'] = options
+            with self.assertRaises(CommandError):
+                self._request('create', payload, schema_version=2)
+            payload['base']['options'] = options
+            created = self._request('create', payload, schema_version=2)
+            expected = {**goal_fixed_move.TIMING, 'profile_id': 'goal-fixed-move-2t-common-fv%d-v1' % scale}
+            self.assertEqual(created['timing'], expected)
+            observed = self._request('get', {'test_id': created['test_id']}, schema_version=2)
+            self.assertEqual(observed['timing'], expected)
+            test = Test.objects.get(pk=created['test_id'])
+            machine = Machine.objects.create(user=self.other_user, info={'concurrency':2,'physical_cores':2,'sockets':1})
+            result = Result.objects.create(test=test, machine=machine)
+            config = {**OPENBENCH_CONFIG,'engines':{self.engine.name:{'nps':1000,'build':{},'private':False}}}
+            distribution = {'runner-count':1,'concurrency-per':1,'games-per-runner':2}
+            with patch('OpenBench.workloads.get_workload.OPENBENCH_CONFIG', config), patch('OpenBench.workloads.get_workload.game_distribution', return_value=distribution):
+                workload = workload_to_dictionary(test, result, machine)
+            self.assertEqual(workload['test']['goal_timing'], expected)
+            for side in ('dev', 'base'):
+                self.assertEqual(workload['test'][side]['options'], options)
+            test.base_options = goal_fixed_move.ZERO_DELAY_OPTIONS + ' FV_SCALE=%d' % (40 - scale)
+            test.save()
+            with self.assertRaises(CommandError):
+                self._request('get', {'test_id':test.id}, schema_version=2)
+
+    @override_settings(AUTOTUNE_RATING_GAME_BUDGETS={'acceptance':2,'stc':131072})
     def test_fixed_move_screening_retains_sprt_and_exact_budget(self):
         created=self._request('create',self._fixed_move_payload('stc'),schema_version=2)
         self.assertEqual(created['stage'],'stc')

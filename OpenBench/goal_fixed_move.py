@@ -21,6 +21,9 @@ def timing_for_options(options):
         return dict(TIMING)
     if options == ZERO_DELAY_OPTIONS:
         return dict(ZERO_DELAY_TIMING)
+    for scale in (16, 24):
+        if options == ZERO_DELAY_OPTIONS + ' FV_SCALE=%d' % scale:
+            return {**TIMING, 'profile_id': 'goal-fixed-move-2t-common-fv%d-v1' % scale}
     return None
 
 

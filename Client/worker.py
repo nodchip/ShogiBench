@@ -1048,6 +1048,11 @@ def validate_goal_fixed_move(workload):
     if test.get('goal_timing', {}).get('profile_id') == 'goal-fixed-move-2t-zero-delay-v1':
         expected['profile_id'] = 'goal-fixed-move-2t-zero-delay-v1'
         options += ' NetworkDelay=0 NetworkDelay2=0'
+    for scale in (16, 24):
+        profile = 'goal-fixed-move-2t-common-fv%d-v1' % scale
+        if test.get('goal_timing', {}).get('profile_id') == profile:
+            expected['profile_id'] = profile
+            options += ' NetworkDelay=0 NetworkDelay2=0 FV_SCALE=%d' % scale
     if (
         test.get('goal_timing') != expected
         or test.get('rule_profile_id') != 'canonical-yaneuraou-csarule24-v1'

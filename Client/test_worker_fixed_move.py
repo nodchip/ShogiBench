@@ -20,6 +20,20 @@ def workload():
 
 
 class FixedMoveTests(unittest.TestCase):
+    def test_common_fv_requires_matching_explicit_scale_on_both_sides(self):
+        for scale in (16, 24):
+            value = workload()
+            value['test']['goal_timing']['profile_id'] = 'goal-fixed-move-2t-common-fv%d-v1' % scale
+            for side in ('dev', 'base'):
+                value['test'][side]['options'] += ' NetworkDelay=0 NetworkDelay2=0 FV_SCALE=%d' % scale
+            for side in ('dev', 'base'):
+                self.assertEqual(worker.scale_time_control(value, 1.0, side), 'st=1000 timemargin=250')
+            for replacement in ('', ' FV_SCALE=32', ' FV_SCALE=%d' % (40 - scale)):
+                changed = __import__('copy').deepcopy(value)
+                changed['test']['base']['options'] = value['test']['base']['options'].rsplit(' FV_SCALE=', 1)[0] + replacement
+                with self.assertRaises(worker.utils.OpenBenchFatalWorkerException):
+                    worker.scale_time_control(changed, 1.0, 'dev')
+
     def test_zero_delay_profile_requires_both_exact_options(self):
         value = workload()
         value['test']['goal_timing']['profile_id'] = 'goal-fixed-move-2t-zero-delay-v1'
