@@ -6,12 +6,13 @@ import sys
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from OpenBench.config import OPENBENCH_CONFIG
 from OpenBench.models import Engine, LogEvent, Network, Profile, RuleProfile, Test
 from OpenBench.rule_profiles import CANONICAL_PROFILE_ID, options_select_canonical_rule
 from OpenBench import goal_fixed_move
+from Client import goal_local_engine
 
 MAX_REQUEST_BYTES = 65536
 OPENING_NAME = 'SHOGI.floodgate32-80.adjust_bishop_exchange.sfen.epd'
@@ -132,7 +133,21 @@ def _side_from_test(test, prefix, schema_version):
         'options': getattr(test, f'{prefix}_options'),
         'network': getattr(test, f'{prefix}_network'),
     }
-    if schema_version == 2:
+    engine = getattr(test, prefix)
+    if engine.source.startswith('goal-local'):
+        if schema_version != 3 or side['repo'] != '':
+            raise ControlError('test_engine_source_not_reconcilable')
+        try:
+            artifact_id, binary_sha = goal_local_engine.parse_source(engine.source)
+            side['source'] = goal_local_engine.descriptor({
+                'kind': 'local_private', 'artifact_id': artifact_id,
+                'binary_sha256': binary_sha, 'name': engine.name, 'bench': engine.bench,
+            })
+            if engine.sha != binary_sha:
+                raise goal_local_engine.LocalEngineError()
+        except goal_local_engine.LocalEngineError:
+            raise ControlError('test_engine_source_not_reconcilable') from None
+    elif schema_version in (2, 3):
         engine = getattr(test, prefix)
         expected_url = side['repo'].rstrip('/') + '/archive/' + engine.sha + '.zip'
         if not GIT_SHA.fullmatch(engine.sha) or engine.source != expected_url:
@@ -256,7 +271,7 @@ class Command(BaseCommand):
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise ControlError('invalid_json') from None
         _exact_object(request, self._request_fields(action), 'invalid_request_shape')
-        if request['schema_version'] not in (1, 2) or request['action'] != action:
+        if type(request['schema_version']) is not int or request['schema_version'] not in (1, 2, 3) or request['action'] != action:
             raise ControlError('invalid_request_identity')
         return request
 
@@ -371,9 +386,35 @@ class Command(BaseCommand):
         )
 
     @staticmethod
+    def _local_source(value, repo):
+        try:
+            source = goal_local_engine.descriptor(value)
+        except goal_local_engine.LocalEngineError:
+            raise ControlError('invalid_local_engine_source') from None
+        if repo != '':
+            raise ControlError('invalid_local_engine_repository')
+        expected = {
+            'source': goal_local_engine.source_uri(source),
+            'sha': source['binary_sha256'], 'bench': source['bench'],
+        }
+        matches = list(Engine.objects.filter(
+            Q(name=source['name']) | Q(source__startswith=(
+                goal_local_engine.SOURCE_PREFIX + source['artifact_id'] + ':'
+            )),
+        )[:2])
+        if matches:
+            if (
+                len(matches) != 1 or matches[0].name != source['name']
+                or any(getattr(matches[0], key) != value for key, value in expected.items())
+            ):
+                raise ControlError('engine_source_identity_conflict')
+            return matches[0]
+        return Engine.objects.create(name=source['name'], **expected)
+
+    @staticmethod
     def _side(value, schema_version):
         fields = ('engine', 'repo', 'options', 'network')
-        if schema_version == 2:
+        if schema_version in (2, 3):
             fields = (*fields, 'source')
         side = _exact_object(
             value,
@@ -392,6 +433,8 @@ class Command(BaseCommand):
             engine = (
                 Engine.objects.get(name=side['engine'])
                 if schema_version == 1
+                else Command._local_source(side['source'], side['repo'])
+                if schema_version == 3 and isinstance(side['source'], dict) and side['source'].get('kind') == 'local_private'
                 else Command._source(side['source'], side['repo'])
             )
         except (Engine.DoesNotExist, Network.DoesNotExist, Engine.MultipleObjectsReturned):
@@ -428,7 +471,7 @@ class Command(BaseCommand):
         policy = self._policy(request['stage'], request['policy'])
         fixed_move = policy == goal_fixed_move.policies().get(request['stage'])
         if fixed_move and (
-            request['schema_version'] != 2
+            request['schema_version'] not in (2, 3)
             or not isinstance(request['dev'], dict)
             or not isinstance(request['base'], dict)
             or goal_fixed_move.timing_for_options(request['dev'].get('options')) is None
@@ -437,6 +480,17 @@ class Command(BaseCommand):
             or request['dev'].get('network') != request['base'].get('network')
         ):
             raise ControlError('fixed_move_comparison_mismatch')
+        if request['schema_version'] == 3:
+            dev_source = request['dev'].get('source') if isinstance(request['dev'], dict) else None
+            base_source = request['base'].get('source') if isinstance(request['base'], dict) else None
+            if (
+                not fixed_move
+                or not isinstance(dev_source, dict) or dev_source.get('kind') != 'local_private'
+                or not isinstance(base_source, dict) or set(base_source) != {'name', 'commit_sha', 'bench'}
+                or request['dev'].get('engine') != request['base'].get('engine')
+                or request['dev'].get('options') == goal_fixed_move.OPTIONS
+            ):
+                raise ControlError('local_engine_comparison_mismatch')
         game_budget = self._game_budget(request['stage'], request['game_budget'])
         if fixed_move and game_budget != (2 if request['stage'] == 'acceptance' else 131072):
             raise ControlError('fixed_move_comparison_mismatch')

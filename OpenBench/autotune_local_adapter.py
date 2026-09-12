@@ -110,9 +110,10 @@ def autotune_local_adapter(request, target, action):
         request_value = json.loads(body.decode('utf-8'))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return _error('request_json_invalid', 400)
-    allowed_versions = (1, 2) if target in ('material', 'rating') else (1,)
+    allowed_versions = (1, 2, 3) if target == 'rating' else (1, 2) if target == 'material' else (1,)
     if (
         not isinstance(request_value, dict)
+        or type(request_value.get('schema_version')) is not int
         or request_value.get('schema_version') not in allowed_versions
         or request_value.get('action') != action
     ):

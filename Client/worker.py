@@ -49,6 +49,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import bench
 import genfens
+import goal_local_engine
 import pgn_util
 import shogi_result
 import utils
@@ -1382,6 +1383,10 @@ def safe_download_engine(config, branch, net_path):
     source      = config.workload['test'][branch]['source']
     private     = config.workload['test'][branch]['private']
 
+    if isinstance(source, str) and source.startswith('goal-local'):
+        validate_goal_fixed_move(config.workload)
+        return goal_local_engine.load_installed(config.workload['test'][branch])
+
     build = config.workload['test'][branch]['build']
     external_network = build.get('network') is not None
     binary_net_path = None if external_network else net_path
@@ -1596,12 +1601,14 @@ def reload_local_imports():
 
     import bench
     import genfens
+    import goal_local_engine
     import pgn_util
     import shogi_result
     import utils
 
     importlib.reload(bench)
     importlib.reload(genfens)
+    importlib.reload(goal_local_engine)
     importlib.reload(pgn_util)
     importlib.reload(shogi_result)
     importlib.reload(utils)

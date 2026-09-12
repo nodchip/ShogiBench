@@ -134,6 +134,32 @@ class AutotuneLocalAdapterTests(SimpleTestCase):
         self.assertEqual(response.json()['error'], 'request_identity_invalid')
         runner.assert_not_called()
 
+    def test_rating_schema_v3_reconciles_without_protocol_downgrade(self):
+        body = b'{"schema_version":3,"action":"get","test_id":7}'
+        with (
+            override_settings(BASE_DIR=self.root.resolve()),
+            self._environment(),
+            patch('OpenBench.autotune_local_adapter.subprocess.run', return_value=self._completed(
+                'get', 'observed', schema_version=3,
+            )) as runner,
+        ):
+            response = Client(REMOTE_ADDR='127.0.0.1').post(
+                '/api/autotune-local/v1/rating/get/', data=body, content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['schema_version'], 3)
+        self.assertEqual(runner.call_args.kwargs['input'], body)
+
+    def test_private_protocol_cannot_expand_material_or_network_contracts(self):
+        for target in ('material', 'network'):
+            with self.subTest(target=target), patch('OpenBench.autotune_local_adapter.subprocess.run') as runner:
+                response = Client(REMOTE_ADDR='127.0.0.1').post(
+                    '/api/autotune-local/v1/%s/get/' % target,
+                    data=b'{"schema_version":3,"action":"get"}', content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 400)
+                runner.assert_not_called()
+
     def test_material_get_maps_to_fixed_read_only_command(self):
         calls = []
 

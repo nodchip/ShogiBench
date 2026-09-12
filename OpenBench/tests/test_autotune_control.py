@@ -127,6 +127,77 @@ class AutotuneControlTests(TestCase):
             payload[side]['options']=goal_fixed_move.OPTIONS
         return payload
 
+    def _local_payload(self):
+        from OpenBench import goal_fixed_move
+        payload = self._fixed_move_payload()
+        for side in ('dev', 'base'):
+            payload[side]['options'] = goal_fixed_move.ZERO_DELAY_OPTIONS + ' FV_SCALE=24'
+        payload['dev']['repo'] = ''
+        payload['dev']['source'] = {
+            'kind': 'local_private', 'artifact_id': '11111111-1111-4111-8111-111111111111',
+            'binary_sha256': 'd' * 64, 'bench': 321,
+            'name': 'goal-local-11111111-1111-4111-8111-111111111111',
+        }
+        return payload
+
+    def test_local_source_create_get_retains_artifact_identity(self):
+        payload = self._local_payload()
+        created = self._request('create', payload, schema_version=3)
+        test = Test.objects.get(pk=created['test_id'])
+        self.assertEqual(test.dev.sha, 'd' * 64)
+        self.assertTrue(test.dev.source.startswith('goal-local-v1:'))
+        observed = self._request('get', {'test_id': test.id}, schema_version=3)
+        self.assertEqual(observed['dev'], payload['dev'])
+        self.assertEqual(observed['base'], payload['base'])
+        self.assertEqual(observed['timing']['move_time_ms'], 1000)
+        for version in (1, 2):
+            with self.assertRaises(CommandError):
+                self._request('get', {'test_id': test.id}, schema_version=version)
+
+    def test_local_source_cannot_mutate_an_existing_artifact_identity(self):
+        payload = self._local_payload()
+        self._request('create', payload, schema_version=3)
+        payload['dev']['source']['binary_sha256'] = 'e' * 64
+        with self.assertRaises(CommandError):
+            self._request('create', payload, schema_version=3)
+        self.assertEqual(Test.objects.count(), 1)
+
+    def test_local_source_preserves_conflicting_existing_artifact_id_under_other_name(self):
+        from Client import goal_local_engine
+        payload = self._local_payload()
+        saved = Engine.objects.create(
+            name='preexisting-unknown-artifact',
+            source=goal_local_engine.source_uri(payload['dev']['source']),
+            sha='e' * 64, bench=999,
+        )
+        with self.assertRaises(CommandError):
+            self._request('create', payload, schema_version=3)
+        saved.refresh_from_db()
+        self.assertEqual(saved.sha, 'e' * 64)
+        self.assertEqual(Test.objects.count(), 0)
+
+    def test_local_source_rejects_public_fallback_and_private_payload_fields(self):
+        for field, value in (('repo', 'https://github.com/example/public-engine'), ('recipe', 'private')):
+            payload = self._local_payload()
+            if field == 'repo':
+                payload['dev'][field] = value
+            else:
+                payload['dev']['source'][field] = value
+            with self.subTest(field=field), self.assertRaises(CommandError):
+                self._request('create', payload, schema_version=3)
+        self.assertEqual(Test.objects.count(), 0)
+
+    def test_local_source_cannot_use_old_protocol_or_different_networks(self):
+        with self.assertRaises(CommandError):
+            self._request('create', self._local_payload(), schema_version=2)
+        payload = self._local_payload()
+        payload['dev']['network'] = '99999999'
+        with self.assertRaises(CommandError):
+            self._request('create', payload, schema_version=3)
+        with self.assertRaises(CommandError):
+            self._request('create', self._create_payload_v2(), schema_version=3)
+        self.assertEqual(Test.objects.count(), 0)
+
     def test_fixed_move_create_get_and_worker_payload_are_exact(self):
         from OpenBench import goal_fixed_move
         from OpenBench.workloads.get_workload import workload_to_dictionary
